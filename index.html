@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Mini DEX Price Viewer — GeckoTerminal</title>
+    <link rel="stylesheet" href="style.css" />
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+</head>
+
+<body>
+    <header class="app-header">
+        <h1>Mini DEX Price Viewer</h1>
+        <p class="sub">On-chain prices via GeckoTerminal (pool OHLCV)</p>
+    </header>
+
+    <main class="container">
+        <form id="controls" class="controls" autocomplete="off">
+            <div class="field">
+                <label for="chain">Network</label>
+                <select id="chain" name="chain">
+                    <option value="eth">eth</option>
+                    <option value="bsc">bsc</option>
+                    <option value="polygon_pos">polygon_pos</option>
+                    <option value="arbitrum">arbitrum</option>
+                    <option value="base">base</option>
+                    <option value="avax">avax</option>
+                    <option value="optimism">optimism</option>
+                    <option value="solana">solana</option>
+                </select>
+                <small>Use GeckoTerminal slugs (e.g. <code>eth</code>, <code>polygon_pos</code>).</small>
+            </div>
+
+            <div class="field">
+                <label for="contract">Token contract</label>
+                <input id="contract" name="contract" type="text" spellcheck="false"
+                    placeholder="0xYourTokenContractAddress" />
+                <small>
+                    It will pick the most liquid pool automatically.
+                    <button type="button" id="use-sample" class="linklike">Use sample</button>
+                </small>
+            </div>
+
+            <div class="field">
+                <label for="step">Step</label>
+                <select id="step" name="step">
+                    <option value="1m">1 minute</option>
+                    <option value="5m">5 minutes</option>
+                    <option value="10m">10 minutes</option>
+                    <option value="15m">15 minutes</option>
+                    <option value="1h" selected>1 hour</option>
+                    <option value="4h">4 hours</option>
+                    <option value="12h">12 hours</option>
+                    <option value="1d">1 day</option>
+                </select>
+                <small>10m is computed from 1-minute candles.</small>
+            </div>
+
+            <div class="field">
+                <label for="rows">Rows (N)</label>
+                <input id="rows" name="rows" type="number" min="1" max="1000" value="100" />
+                <small>Max 1000 rows per request.</small>
+            </div>
+
+            <div class="field">
+                <label for="start">Start</label>
+                <input id="start" name="start" type="datetime-local" />
+            </div>
+
+            <div class="field">
+                <label for="end">End</label>
+                <input id="end" name="end" type="datetime-local" />
+                <small>Leave empty for “now”.</small>
+            </div>
+
+            <div class="actions">
+                <button id="load" class="btn primary" type="submit">Load prices</button>
+                <button id="stop" class="btn" type="button" disabled>Stop</button>
+            </div>
+        </form>
+
+        <section class="meta">
+            <div id="status" class="status">Ready.</div>
+            <div id="provider" class="provider">Provider: GeckoTerminal Public API</div>
+        </section>
+
+        <section class="chosen">
+            <div id="chosen-pool" class="chip">Pool: —</div>
+            <div id="chosen-dex" class="chip">DEX: —</div>
+            <div id="token-side" class="chip">Token side: —</div>
+        </section>
+
+        <section class="table-wrap">
+            <table id="prices">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Timestamp</th>
+                        <th>Unix (s)</th>
+                        <th>Open</th>
+                        <th>High</th>
+                        <th>Low</th>
+                        <th>Close</th>
+                        <th>Volume</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody"></tbody>
+            </table>
+        </section>
+    </main>
+
+    <footer class="app-footer">
+        <small>Data fetched from GeckoTerminal’s open endpoints.<br></small>
+        <small>MIT License, coded by Luka Piskorec with ChatGPT, 2025</small>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
