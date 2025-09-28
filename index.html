@@ -85,6 +85,52 @@
             <div id="provider" class="provider">Provider: GeckoTerminal Public API</div>
         </section>
 
+        <!-- INFO BAR -->
+        <section id="token-info" class="infobar" hidden>
+            <div class="info-item">
+                <span class="label">Name</span>
+                <span id="ti-name" class="value">—</span>
+            </div>
+            <div class="info-item">
+                <span class="label">Ticker</span>
+                <span id="ti-symbol" class="value">—</span>
+            </div>
+            <div class="info-item">
+                <span class="label">Launch (proxy)</span>
+                <span id="ti-launch" class="value">—</span>
+            </div>
+            <div class="info-item">
+                <span class="label">Token age</span>
+                <span id="ti-age" class="value">—</span>
+            </div>
+            <div class="info-item">
+                <span class="label">Liquidity (USD)</span>
+                <span id="ti-liq" class="value">—</span>
+            </div>
+            <div class="info-item">
+                <span class="label">24h Volume (USD)</span>
+                <span id="ti-vol24" class="value">—</span>
+            </div>
+            <div class="info-item">
+                <span class="label">Market Cap (USD)</span>
+                <span id="ti-mcap" class="value">—</span>
+            </div>
+        </section>
+
+        <!-- COLUMN PICKER -->
+        <section class="columns-picker">
+            <span>Columns:</span>
+            <label><input type="checkbox" data-col="timestamp" checked /> Timestamp</label>
+            <label><input type="checkbox" data-col="unix" checked /> Unix</label>
+            <label><input type="checkbox" data-col="open" checked /> Open</label>
+            <label><input type="checkbox" data-col="high" checked /> High</label>
+            <label><input type="checkbox" data-col="low" checked /> Low</label>
+            <label><input type="checkbox" data-col="close" checked /> Close</label>
+            <label><input type="checkbox" data-col="volume" checked /> Volume</label>
+            <label><input type="checkbox" data-col="mcap" checked /> Market Cap</label>
+        </section>
+
+
         <section class="chosen">
             <div id="chosen-pool" class="chip">Pool: —</div>
             <div id="chosen-dex" class="chip">DEX: —</div>
@@ -96,17 +142,19 @@
                 <thead>
                     <tr>
                         <th>#</th>
-                        <th>Timestamp</th>
-                        <th>Unix (s)</th>
-                        <th>Open</th>
-                        <th>High</th>
-                        <th>Low</th>
-                        <th>Close</th>
-                        <th>Volume</th>
+                        <th data-col="timestamp">Timestamp</th>
+                        <th data-col="unix">Unix (s)</th>
+                        <th data-col="open">Open</th>
+                        <th data-col="high">High</th>
+                        <th data-col="low">Low</th>
+                        <th data-col="close">Close</th>
+                        <th data-col="volume">Volume</th>
+                        <th data-col="mcap">Market Cap</th>
                     </tr>
                 </thead>
                 <tbody id="tbody"></tbody>
             </table>
+
         </section>
     </main>
 
