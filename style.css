@@ -496,3 +496,12 @@ table.hide-col-breakeven_mc th[data-col="breakeven_mc"] {
         flex: 1;
     }
 }
+
+/* Make the table text smaller (to match inputs ~13px) */
+#prices { font-size: 13px; }
+
+/* (optional) make the header a touch smaller too */
+#prices thead th { font-size: 12px; }
+
+/* (optional) tighter rows */
+#prices thead th, #prices tbody td { padding: 6px 8px; }
