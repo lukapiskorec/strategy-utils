@@ -47,9 +47,6 @@ const els = {
     stop: document.getElementById("stop"),
     status: document.getElementById("status"),
     tbody: document.getElementById("tbody"),
-    chipPool: document.getElementById("chosen-pool"),
-    chipDex: document.getElementById("chosen-dex"),
-    chipSide: document.getElementById("token-side"),
     ti: {
         wrap: document.getElementById("token-info"),
         name: document.getElementById("ti-name"),
@@ -458,10 +455,6 @@ async function loadPrices(e) {
 
         // Update info bar (also sets state.launchTs internally)
         updateInfoBarFromToken(tokenJson, chosen);
-
-        els.chipPool.textContent = `Pool: ${chosen.poolAddress.slice(0, 6)}…${chosen.poolAddress.slice(-4)}`;
-        els.chipDex.textContent = `DEX: ${chosen.dexName || "—"}`;
-        els.chipSide.textContent = `Token side: ${chosen.side}`;
 
         // 2) Now decide the time range
         const now = new Date();
