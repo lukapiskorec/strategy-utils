@@ -23,10 +23,23 @@ const STEP_MAP = {
     "1d": { tf: "day", agg: 1, sec: 86400, client10m: false },
 };
 
+// Fixed network
+const FIXED_NETWORK = "eth";
+
+// Predefined Strategy -> contract mapping (Ethereum)
+const STRATEGIES = {
+    PunkStrategy: "0xc50673EDb3A7b94E8CAD8a7d4E0cD68864E33eDF",
+    BirbStrategy: "0x6bcba7cd81a5f12c10ca1bf9b36761cc382658e8",
+    DickStrategy: "0x8680acfacb3fed5408764343fc7e8358e8c85a4c",
+    ApeStrategy: "0x9ebf91b8d6ff68aa05545301a3d0984eaee54a03",
+    PudgyStrategy: "0xb3d6e9e142a785ea8a4f0050fee73bcc3438c5c5",
+    SquiggleStrategy: "0x742fd09cbbeb1ec4e3d6404dfc959a324deb50e6",
+    ToadzStrategy: "0x92cedfdbce6e87b595e4a529afa2905480368af4",
+};
+
 const els = {
     form: document.getElementById("controls"),
-    chain: document.getElementById("chain"),
-    contract: document.getElementById("contract"),
+    strategy: document.getElementById("strategy"),
     step: document.getElementById("step"),
     rows: document.getElementById("rows"),
     start: document.getElementById("start"),
@@ -35,7 +48,6 @@ const els = {
     stop: document.getElementById("stop"),
     status: document.getElementById("status"),
     tbody: document.getElementById("tbody"),
-    useSample: document.getElementById("use-sample"),
     chipPool: document.getElementById("chosen-pool"),
     chipDex: document.getElementById("chosen-dex"),
     chipSide: document.getElementById("token-side"),
@@ -48,6 +60,10 @@ const els = {
         liq: document.getElementById("ti-liq"),
         vol24: document.getElementById("ti-vol24"),
         mcap: document.getElementById("ti-mcap"),
+        contract: document.getElementById("ti-contract"),
+        copyContract: document.getElementById("copy-contract"),
+        scanLink: document.getElementById("scan-link"),
+
     },
     table: document.getElementById("prices"),
     colPicker: document.querySelector(".columns-picker"),
@@ -65,6 +81,43 @@ const state = {
 
 let aborter = null;
 
+async function copyTextToClipboard(text) {
+    if (!text) return false;
+    // Try modern API first (works on https or localhost)
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(text);
+            return true;
+        }
+    } catch (_) { /* fall through */ }
+
+    // Fallback: temporary textarea + execCommand
+    try {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "absolute";
+        ta.style.left = "-9999px";
+        document.body.appendChild(ta);
+        ta.select();
+        const ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+        return ok;
+    } catch (_) {
+        return false;
+    }
+}
+
+function shortAddr(addr) {
+    if (!addr) return "—";
+    const a = String(addr);
+    return a.length > 12 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a;
+}
+
+function getSelectedContract() {
+    const key = (els.strategy?.value || "").trim();
+    return STRATEGIES[key] || null;
+}
 
 function numOrNull(x) {
     if (x == null) return null;
@@ -274,6 +327,23 @@ function updateInfoBarFromToken(tokenJson, chosenPool) {
     els.ti.vol24.textContent = fmtUSD(token.volume_usd?.h24 ?? null);
     els.ti.mcap.textContent = mcapText;
 
+    // Show selected contract + actions
+    const selectedAddr = getSelectedContract();
+    const short = shortAddr(selectedAddr);
+    els.ti.contract.textContent = short;
+    els.ti.contract.title = selectedAddr || "—";
+
+    // Enable/hide buttons depending on availability
+    const hasAddr = !!selectedAddr;
+    els.ti.copyContract.hidden = !hasAddr;
+    els.ti.copyContract.disabled = !hasAddr;
+
+    // Etherscan (fixed to Ethereum mainnet)
+    els.ti.scanLink.href = hasAddr ? `https://etherscan.io/token/${selectedAddr}` : "#";
+    els.ti.scanLink.target = "_blank";
+    els.ti.scanLink.rel = "noopener";
+    els.ti.scanLink.hidden = !hasAddr;
+
     els.ti.wrap.hidden = false;
 }
 
@@ -328,20 +398,20 @@ async function loadPrices(e) {
     const { signal } = aborter;
 
     try {
-        const network = els.chain.value.trim();
-        const contract = els.contract.value.trim();
+        const network = FIXED_NETWORK;
+        const contract = getSelectedContract();
         const stepKey = els.step.value;
         const step = STEP_MAP[stepKey];
         const maxRows = Math.max(1, Math.min(1000, parseInt(els.rows.value, 10) || 100));
 
-        if (!network || !contract) {
-            setStatus("Please enter both network and token contract.", false);
+        if (!contract) {
+            setStatus("Please select a strategy.", false);
             return;
         }
 
         // 2) reset state
         Object.assign(state, {
-            network,
+            network,  // always "eth"
             contract,
             tokenAttrs: null,
             chosenPool: null,
@@ -443,11 +513,6 @@ async function loadPrices(e) {
 // Wire up UI
 els.form.addEventListener("submit", loadPrices);
 els.stop.addEventListener("click", () => { if (aborter) aborter.abort(); });
-els.useSample.addEventListener("click", () => {
-    // Sample: UNI on Ethereum
-    els.chain.value = "eth";
-    els.contract.value = "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984";
-});
 
 // Defaults
 (function init() {
@@ -455,6 +520,27 @@ els.useSample.addEventListener("click", () => {
     initColumnPicker();
     els.end.value = dateToLocalInput(now);
     els.start.value = dateToLocalInput(new Date(now.getTime() - 60 * 60 * 1000)); // last 1h
-    els.contract.placeholder = "0x0000000000000000000000000000000000000000";
     setStatus("Ready. Set token + range, then Load.");
+
+    // Copy contract to clipboard
+    if (els.ti.copyContract) {
+        els.ti.copyContract.addEventListener("click", async () => {
+            const addr = getSelectedContract();
+            if (!addr) return;
+            const ok = await copyTextToClipboard(addr);
+            // tiny UX feedback via title
+            const oldTitle = els.ti.copyContract.title || "Copy address";
+            els.ti.copyContract.title = ok ? "Copied!" : "Copy failed";
+            setTimeout(() => { els.ti.copyContract.title = oldTitle; }, 1200);
+        });
+    }
+
+    // remember checks per column
+    els.colPicker.querySelectorAll('input[type="checkbox"][data-col]').forEach(cb => {
+        const key = `col:${cb.dataset.col}`;
+        const saved = localStorage.getItem(key);
+        if (saved !== null) cb.checked = saved === "true";
+        cb.addEventListener("change", () => localStorage.setItem(key, String(cb.checked)));
+    });
+
 })();

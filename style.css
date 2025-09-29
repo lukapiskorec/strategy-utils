@@ -350,3 +350,62 @@ table.hide-col-mcap th[data-col="mcap"] {
         grid-column: span 12;
     }
 }
+
+/* Address row and action icons */
+.addr-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+
+.addr-inline .addr {
+    font-family: var(--mono);
+    background: #0b1015;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 4px 8px;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: inline-block;
+}
+
+/* brighter icon buttons */
+.icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, .75);
+    /* brighter line */
+    background: rgba(255, 255, 255, .04);
+    /* subtle lift */
+    color: #ffffff;
+    /* makes SVG white via currentColor */
+    cursor: pointer;
+    padding: 0;
+    transition: border-color .15s ease, background .15s ease, transform .02s ease-in-out;
+    text-decoration: none;
+}
+
+.icon-btn:hover {
+    border-color: rgba(255, 255, 255, .95);
+    background: rgba(255, 255, 255, .08);
+}
+
+.icon-btn:active {
+    transform: translateY(1px);
+}
+
+.icon-btn svg {
+    display: block;
+}
+
+/* make SVGs inherit from .icon-btn { color: ... } */
+.icon-btn svg path {
+  fill: currentColor;       /* for filled icons (your case) */
+  /* stroke: currentColor;  <-- use this instead if your icons are stroke-only */
+}
