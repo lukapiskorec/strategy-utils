@@ -441,6 +441,21 @@ table.hide-col-mcap th[data-col="mcap"] {
     display: none;
 }
 
+table.hide-col-fee td[data-col="fee"],
+table.hide-col-fee th[data-col="fee"] {
+    display: none;
+}
+
+table.hide-col-breakeven td[data-col="breakeven"],
+table.hide-col-breakeven th[data-col="breakeven"] {
+    display: none;
+}
+
+table.hide-col-breakeven_mc td[data-col="breakeven_mc"],
+table.hide-col-breakeven_mc th[data-col="breakeven_mc"] {
+    display: none;
+}
+
 /* ===== Responsive grid spans =====
    1-col  (default): span 12
    2-cols (>= 600px): span 6

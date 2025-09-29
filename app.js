@@ -78,6 +78,40 @@ const state = {
 
 let aborter = null;
 
+// Trading fee schedule:
+// minute 0 after launch: 95%
+// then -1% per minute until minute 85 reaches 10%
+// after that: flat 10%. If launchTs missing, default to 10%.
+function computeTradingFeePercent(tsSec) {
+    const launch = state.launchTs;
+    if (!Number.isFinite(launch)) return 10;
+    const delta = tsSec - launch;
+    if (delta < 0) return 95; // edge: before launch
+    const minutes = Math.floor(delta / 60);
+    const fee = 95 - minutes;
+    return Math.max(10, fee);
+}
+
+function breakevenMultipleFromFee(pct) {
+    if (pct == null || !isFinite(pct)) return null;
+    const denom = 100 - pct;
+    if (denom <= 0) return null;
+    return 100 / denom;
+}
+
+function fmtPercent(p) {
+    if (p == null || !isFinite(p)) return "—";
+    // whole percent display (e.g., 95%, 10%)
+    return `${Math.round(p)}%`;
+}
+
+function fmtMultiple(x) {
+    if (x == null || !isFinite(x)) return "—";
+    const r = Math.round(x * 100) / 100;
+    // nice: drop trailing .00 (so 20x instead of 20.00x)
+    return (Math.abs(r - Math.round(r)) < 1e-9) ? `${Math.round(r)}x` : `${r.toFixed(2)}x`;
+}
+
 async function prefillStartFromLaunch() {
     if (!els.startAtLaunch?.checked) return;
     const contract = getSelectedContract();
@@ -368,28 +402,38 @@ function updateInfoBarFromToken(tokenJson, chosenPool) {
 }
 
 function renderRows(rows) {
-    els.tbody.innerHTML = "";
-    const supply = state.mcapSupply; // tokens (may be null)
-    const frag = document.createDocumentFragment();
+  els.tbody.innerHTML = "";
+  const supply = state.mcapSupply; // tokens (may be null)
+  const frag = document.createDocumentFragment();
 
-    rows.forEach((r, idx) => {
-        const mcap = (supply != null && r?.c != null) ? r.c * supply : null;
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-        <td>${idx + 1}</td>
-        <td data-col="timestamp">${new Date(r.ts * 1000).toLocaleString()}</td>
-        <td data-col="unix">${r.ts}</td>
-        <td data-col="open">${fmt(r.o)}</td>
-        <td data-col="high">${fmt(r.h)}</td>
-        <td data-col="low">${fmt(r.l)}</td>
-        <td data-col="close">${fmt(r.c)}</td>
-        <td data-col="volume">${fmt(r.v)}</td>
-        <td data-col="mcap">${mcap == null ? "—" : fmtUSD(mcap)}</td>
-        `;
-        frag.appendChild(tr);
-    });
+  rows.forEach((r, idx) => {
+    // Market cap at this timestamp (close * supply)
+    const mcap = (supply != null && r?.c != null) ? r.c * supply : null;
 
-    els.tbody.appendChild(frag);
+    // Trading fee + breakeven
+    const feePct = computeTradingFeePercent(r.ts);
+    const bMultiple = breakevenMultipleFromFee(feePct);
+    const bMC = (bMultiple != null && mcap != null) ? (bMultiple * mcap) : null;
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${idx + 1}</td>
+      <td data-col="timestamp">${new Date(r.ts * 1000).toLocaleString()}</td>
+      <td data-col="unix">${r.ts}</td>
+      <td data-col="open">${fmt(r.o)}</td>
+      <td data-col="high">${fmt(r.h)}</td>
+      <td data-col="low">${fmt(r.l)}</td>
+      <td data-col="close">${fmt(r.c)}</td>
+      <td data-col="volume">${fmt(r.v)}</td>
+      <td data-col="mcap">${mcap == null ? "—" : fmtUSD(mcap)}</td>
+      <td data-col="fee">${fmtPercent(feePct)}</td>
+      <td data-col="breakeven">${fmtMultiple(bMultiple)}</td>
+      <td data-col="breakeven_mc">${bMC == null ? "—" : fmtUSD(bMC)}</td>
+    `;
+    frag.appendChild(tr);
+  });
+
+  els.tbody.appendChild(frag);
 }
 
 function initColumnPicker() {
@@ -401,7 +445,7 @@ function initColumnPicker() {
         });
         state.hiddenCols = hidden;
 
-        const allKeys = ["timestamp", "unix", "open", "high", "low", "close", "volume", "mcap"];
+        const allKeys = ["timestamp","unix","open","high","low","close","volume","mcap","fee","breakeven","breakeven_mc"];
         allKeys.forEach(k => {
             els.table.classList.toggle(`hide-col-${k}`, hidden.has(k));
         });
