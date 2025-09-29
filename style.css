@@ -497,11 +497,111 @@ table.hide-col-breakeven_mc th[data-col="breakeven_mc"] {
     }
 }
 
-/* Make the table text smaller (to match inputs ~13px) */
-#prices { font-size: 13px; }
 
-/* (optional) make the header a touch smaller too */
-#prices thead th { font-size: 12px; }
+/* Fixed-height scrollable table */
+.table-wrap {
+    background: var(--panel);
+    border: 1px solid var(--border);
+}
 
-/* (optional) tighter rows */
-#prices thead th, #prices tbody td { padding: 6px 8px; }
+.table-scroll {
+    height: 360px;
+    /* adjust if you prefer larger/smaller */
+    overflow: auto;
+    border-radius: var(--radius);
+}
+
+.table-scroll table {
+    width: 100%;
+}
+
+/* Chart wrapper */
+.chart-wrap {
+    margin-top: 12px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 8px;
+}
+
+.chart-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 8px;
+    color: var(--muted);
+}
+
+.chart-controls label {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    background: #0b0f13;
+    border: 1px solid var(--border);
+    padding: 3px 6px;
+    color: #e8a7e1;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.chart-canvas-wrap {
+    position: relative;
+    background: #0b0f13;
+    border: 1px solid var(--border);
+    height: 340px;
+    /* keep a bit taller than canvas to allow tooltip space if needed */
+}
+
+.chart-canvas-wrap canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+/* Tooltip */
+.chart-tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: #140a18;
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 6px 8px;
+    font-size: 12px;
+    white-space: nowrap;
+    transform: translate(8px, -100%);
+    /* offset near the cursor */
+    z-index: 2;
+}
+
+/* Legend */
+.chart-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.chart-legend .swatch {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    margin-right: 6px;
+    border: 1px solid #000;
+}
+
+/* Smaller table text */
+#prices {
+    font-size: 13px;
+}
+
+#prices thead th {
+    font-size: 12px;
+}
+
+#prices thead th,
+#prices tbody td {
+    padding: 6px 8px;
+}

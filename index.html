@@ -149,31 +149,57 @@
             <label><input type="checkbox" data-col="fee" checked> Trading fee</label>
             <label><input type="checkbox" data-col="breakeven" checked> Breakeven mult.</label>
             <label><input type="checkbox" data-col="breakeven_mc" checked> Breakeven MC</label>
-
         </section>
 
-        <!-- TABLE -->
+        <!-- TABLE (fixed-height with scroll) -->
         <section class="table-wrap">
-            <table id="prices">
-                <thead>
-                    <tr>
-                        <th>#</th>
-                        <th data-col="timestamp">Timestamp</th>
-                        <th data-col="unix">Unix (s)</th>
-                        <th data-col="open">Open</th>
-                        <th data-col="high">High</th>
-                        <th data-col="low">Low</th>
-                        <th data-col="close">Close</th>
-                        <th data-col="volume">Volume</th>
-                        <th data-col="mcap">Market Cap</th>
-                        <th data-col="fee">Trading fee</th>
-                        <th data-col="breakeven">Breakeven mult.</th>
-                        <th data-col="breakeven_mc">Breakeven MC</th>
-                    </tr>
-                </thead>
-                <tbody id="tbody"></tbody>
-            </table>
+            <div class="table-scroll">
+                <table id="prices">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th data-col="timestamp">Timestamp</th>
+                            <th data-col="unix">Unix (s)</th>
+                            <th data-col="open">Open</th>
+                            <th data-col="high">High</th>
+                            <th data-col="low">Low</th>
+                            <th data-col="close">Close</th>
+                            <th data-col="volume">Volume</th>
+                            <th data-col="mcap">Market Cap</th>
+                            <th data-col="fee">Trading fee</th>
+                            <th data-col="breakeven">Breakeven mult.</th>
+                            <th data-col="breakeven_mc">Breakeven MC</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbody"></tbody>
+                </table>
+            </div>
         </section>
+
+        <!-- CHART -->
+        <section class="chart-wrap">
+            <div class="chart-controls" aria-label="Chart series">
+                <span>Chart:</span>
+                <!-- defaults: Close + Market Cap -->
+                <label><input type="checkbox" data-ser="open"> Open</label>
+                <label><input type="checkbox" data-ser="high"> High</label>
+                <label><input type="checkbox" data-ser="low"> Low</label>
+                <label><input type="checkbox" data-ser="close" checked> Close</label>
+                <label><input type="checkbox" data-ser="volume"> Volume</label>
+                <label><input type="checkbox" data-ser="mcap" checked> Market Cap</label>
+                <label><input type="checkbox" data-ser="fee"> Trading fee</label>
+                <label><input type="checkbox" data-ser="breakeven"> Breakeven mult.</label>
+                <label><input type="checkbox" data-ser="breakeven_mc"> Breakeven MC</label>
+            </div>
+
+            <div class="chart-canvas-wrap">
+                <canvas id="chart" width="1000" height="320"></canvas>
+                <div id="chart-tooltip" class="chart-tooltip" hidden></div>
+            </div>
+
+            <div id="chart-legend" class="chart-legend"></div>
+        </section>
+
     </main>
 
     <footer class="app-footer">
