@@ -69,7 +69,7 @@ body::before {
 
 /* Header & container */
 .app-header {
-    padding: 20px 16px 6px;
+    padding: 10px 16px 6px;
     text-align: center;
     position: relative;
     z-index: 1;
@@ -81,12 +81,14 @@ body::before {
     letter-spacing: .04em;
     border-bottom: 1px dotted var(--border);
     display: inline-block;
-    padding-bottom: 4px;
+    padding-bottom: 2px;
+    font-size: 25px;
 }
 
 .app-header .sub {
     margin: 0;
     color: var(--muted);
+    font-size: 13px;
 }
 
 .container {
@@ -106,7 +108,7 @@ body::before {
     border: 1px solid var(--border);
     border-radius: var(--radius);
     box-shadow: var(--shadow);
-    padding: 8px;
+    padding: 2px;
 }
 
 .field {
@@ -117,14 +119,14 @@ body::before {
 }
 
 .field label {
-    font-size: 12px;
+    font-size: 11px;
     letter-spacing: .04em;
     text-transform: uppercase;
 }
 
 .field small {
     color: var(--muted);
-    font-size: 11px;
+    font-size: 10px;
 }
 
 .field input[type="text"],
@@ -136,10 +138,10 @@ body::before {
     color: var(--text);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 6px 8px;
+    padding: 2px 8px;
     outline: none;
     font-family: var(--mono);
-    font-size: 13px;
+    font-size: 14px;
 }
 
 .field input::placeholder {
@@ -163,20 +165,20 @@ body::before {
 
 .btn {
     cursor: pointer;
-    padding: 6px 10px;
+    padding: 2px 10px;
     border-radius: var(--radius);
     border: 1px solid var(--border);
     color: var(--text);
     background: #0b0f13;
     transition: background .08s ease, border-color .08s ease, transform .02s ease;
-    font-size: 12px;
+    font-size: 11px;
     letter-spacing: .06em;
     text-transform: uppercase;
 }
 
 .btn:hover {
     border-color: var(--accent);
-    background: #120d18;
+    background: var(--accent);
 }
 
 .btn:active {
@@ -185,6 +187,12 @@ body::before {
 
 .btn.primary {
     /* retro: solid block with double border effect */
+    background: var(--accent-2);
+    color: #020308;
+    border: 3px double #012d33;
+}
+
+.btn.primary:hover {
     background: var(--accent);
     color: #020308;
     border: 3px double #012d33;
@@ -205,7 +213,7 @@ body::before {
 
 .status,
 .provider {
-    font-size: 12px;
+    font-size: 11px;
 }
 
 .status {
@@ -233,7 +241,7 @@ body::before {
     background: #0b0f13;
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 6px 8px;
+    padding: 2px 8px;
 }
 
 .infobar .label {
@@ -246,7 +254,7 @@ body::before {
 
 .infobar .value {
     font-family: var(--mono);
-    font-size: 13px;
+    font-size: 14px;
 }
 
 /* Inline checkbox row */
@@ -261,12 +269,12 @@ body::before {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    font-size: 12px;
+    font-size: 11px;
     color: var(--text);
 }
 
 .inline-check small {
-    font-size: 11px;
+    font-size: 10px;
     color: var(--muted);
 }
 
@@ -283,12 +291,12 @@ body::before {
     background: #0a0c10;
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 3px 6px;
+    padding: 2px 6px;
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     display: inline-block;
-    font-size: 12px;
+    font-size: 14px;
 }
 
 .icon-btn {
@@ -334,6 +342,7 @@ body::before {
     gap: 6px;
     align-items: center;
     margin: 6px 2px 10px;
+    font-size: 11px;
     color: var(--muted);
 }
 
@@ -344,9 +353,9 @@ body::before {
     background: #0b0f13;
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 3px 6px;
+    padding: 2px 6px;
     color: #e8a7e1;
-    font-size: 12px;
+    font-size: 11px;
     cursor: pointer;
 }
 
@@ -375,7 +384,7 @@ thead th {
     background: #140a18;
     color: #ffd1f7;
     text-align: left;
-    padding: 8px 10px;
+    padding: 2px 10px;
     font-weight: 700;
     letter-spacing: .04em;
     text-transform: uppercase;
@@ -383,7 +392,7 @@ thead th {
 }
 
 tbody td {
-    padding: 8px 10px;
+    padding: 2px 10px;
     border-bottom: 1px solid rgba(255, 255, 255, .08);
 }
 
@@ -396,6 +405,7 @@ tbody tr:hover {
     max-width: 1100px;
     margin: 16px auto 36px;
     padding: 0 16px;
+    font-size: 11px;
     color: var(--muted);
     text-align: center;
 }
@@ -460,8 +470,10 @@ table.hide-col-breakeven_mc th[data-col="breakeven_mc"] {
    1-col  (default): span 12
    2-cols (>= 600px): span 6
    3-cols (>= 760px): span 4
-   4-cols (>=1000px): span 3
+   4-cols (>=900px): span 3  (controls & infobar)
+   5-cols (>=1000px): controls only (span 3 on a 15-track grid)
 */
+
 @media (min-width:600px) {
 
     .controls .field,
@@ -478,7 +490,7 @@ table.hide-col-breakeven_mc th[data-col="breakeven_mc"] {
     }
 }
 
-@media (min-width:1000px) {
+@media (min-width:900px) {
 
     .controls .field,
     .infobar .info-item {
@@ -497,6 +509,26 @@ table.hide-col-breakeven_mc th[data-col="breakeven_mc"] {
     }
 }
 
+/* === Controls: 5 columns on wide screens === */
+/* Use a 15-track grid so each control spans 3 tracks → 5 items per row */
+@media (min-width: 1000px) {
+    .controls {
+        grid-template-columns: repeat(15, 1fr);
+    }
+
+    /* Make both inputs and the actions block behave like 1 "cell" */
+    .controls .field,
+    .controls .actions {
+        grid-column: span 3;
+        /* 15 / 3 = 5 columns per row */
+    }
+
+    /* Keep the buttons from expanding oddly; let them sit side-by-side */
+    .controls .actions {
+        justify-content: flex-start;
+        gap: 8px;
+    }
+}
 
 /* Fixed-height scrollable table */
 .table-wrap {
@@ -515,12 +547,56 @@ table.hide-col-breakeven_mc th[data-col="breakeven_mc"] {
     width: 100%;
 }
 
+
+
+/* Firefox */
+.table-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: var(--text) #0b0f13;
+    /* thumb, track */
+    scrollbar-gutter: stable both-edges;
+    /* avoids layout shift when bars appear */
+}
+
+/* WebKit (Chrome/Edge/Safari) */
+.table-scroll::-webkit-scrollbar {
+    width: 10px;
+    /* vertical bar */
+    height: 10px;
+    /* horizontal bar (just in case) */
+}
+
+.table-scroll::-webkit-scrollbar-track {
+    background: #0b0f13;
+    /* dark track to match panel */
+    border-left: 1px solid var(--border);
+}
+
+.table-scroll::-webkit-scrollbar-thumb {
+    background: var(--text);
+    /* bright magenta */
+    border: 2px solid #0b0f13;
+    /* creates a recessed look */
+    border-radius: 0;
+    /* sharp edges */
+}
+
+.table-scroll::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-2);
+    /* hot magenta on hover */
+}
+
+.table-scroll::-webkit-scrollbar-corner {
+    background: #0b0f13;
+}
+
+
 /* Chart wrapper */
 .chart-wrap {
     margin-top: 12px;
     background: var(--panel);
     border: 1px solid var(--border);
-    padding: 8px;
+    padding: 2px;
 }
 
 .chart-controls {
@@ -529,6 +605,7 @@ table.hide-col-breakeven_mc th[data-col="breakeven_mc"] {
     gap: 8px;
     align-items: center;
     margin-bottom: 8px;
+    font-size: 11px;
     color: var(--muted);
 }
 
@@ -538,9 +615,9 @@ table.hide-col-breakeven_mc th[data-col="breakeven_mc"] {
     align-items: center;
     background: #0b0f13;
     border: 1px solid var(--border);
-    padding: 3px 6px;
+    padding: 2px 6px;
     color: #e8a7e1;
-    font-size: 12px;
+    font-size: 11px;
     cursor: pointer;
 }
 
@@ -565,8 +642,8 @@ table.hide-col-breakeven_mc th[data-col="breakeven_mc"] {
     background: #140a18;
     color: var(--text);
     border: 1px solid var(--border);
-    padding: 6px 8px;
-    font-size: 12px;
+    padding: 2px 8px;
+    font-size: 11px;
     white-space: nowrap;
     transform: translate(8px, -100%);
     /* offset near the cursor */
@@ -580,7 +657,7 @@ table.hide-col-breakeven_mc th[data-col="breakeven_mc"] {
     gap: 8px;
     align-items: center;
     margin-top: 8px;
-    font-size: 12px;
+    font-size: 11px;
     color: var(--muted);
 }
 
@@ -594,14 +671,112 @@ table.hide-col-breakeven_mc th[data-col="breakeven_mc"] {
 
 /* Smaller table text */
 #prices {
-    font-size: 13px;
+    font-size: 11px;
 }
 
 #prices thead th {
-    font-size: 12px;
+    font-size: 11px;
 }
 
 #prices thead th,
 #prices tbody td {
-    padding: 6px 8px;
+    padding: 2px 8px;
+}
+
+
+/* === Compact fields === */
+.field {
+    gap: 2px;
+    /* less space between label and input */
+}
+
+.field label {
+    font-size: 11px;
+}
+
+/* Text/number/datetime/select controls */
+.field input[type="text"],
+.field input[type="number"],
+.field input[type="datetime-local"],
+.field select {
+    /* smaller vertical padding */
+    padding: 0px 8px;
+    /* top/bottom, left/right */
+    font-size: 14px;
+    /* optional: smaller text */
+    line-height: 1.2;
+    /* keeps text from adding extra height */
+}
+
+/* (Optional) make buttons match the tighter height */
+.actions .btn {
+    padding: 0px 10px;
+    font-size: 11px;
+}
+
+/* (Optional) column picker pills a bit tighter too */
+.columns-picker label {
+    padding: 0px 6px;
+    font-size: 11px;
+}
+
+
+
+/* Never allow horizontal scroll on the page */
+html,
+body {
+    overflow-x: hidden;
+}
+
+/* Clip anything that pokes outside the chart (e.g., tooltip near the edge) */
+.chart-canvas-wrap {
+    overflow: hidden;
+}
+
+/* Keep the tooltip reasonable in width so it doesn't force wide layout */
+.chart-tooltip {
+    max-width: min(320px, 80vw);
+    word-break: break-word;
+}
+
+
+/* === Unify ALL checkbox styles (columns, chart, and At Launch) === */
+
+/* 1) Accent color for the checkbox control itself */
+.columns-picker input[type="checkbox"],
+.chart-controls input[type="checkbox"],
+.inline-check input[type="checkbox"] {
+    accent-color: var(--text);
+    /* bright magenta */
+}
+
+/* 2) Default label look */
+.columns-picker label,
+.chart-controls label,
+.inline-check label {
+    color: var(--muted);
+    border: 1px solid var(--border);
+    background: #0b0f13;
+    padding: 3px 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+}
+
+/* 3) Checked state: magenta label + stronger border/background */
+.columns-picker label:has(input:checked),
+.chart-controls label:has(input:checked),
+.inline-check label:has(input:checked) {
+    color: var(--text);
+    border-color: var(--text);
+    background: rgba(255, 0, 255, .06);
+}
+
+/* 4) Keyboard focus cue on the whole label when the input is focused */
+.columns-picker label:has(input:focus-visible),
+.chart-controls label:has(input:focus-visible),
+.inline-check label:has(input:focus-visible) {
+    outline: 1px dotted var(--text);
+    outline-offset: 2px;
 }

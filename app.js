@@ -84,6 +84,9 @@ const CHART_SERIES_DEF = {
     breakeven_mc: { label: "Breakeven MC", color: "#b967ff", fmt: (v) => fmtUSD(v) },
 };
 
+// How much vertical breathing room around data (top & bottom), e.g. 8%
+const CHART_Y_PAD_FRAC = 0.08;
+
 // ---- Global app state ----
 const state = {
     network: null,
@@ -197,6 +200,12 @@ function drawChart() {
     if (!isFinite(min) || !isFinite(max)) { drawEmpty(ctx, cssW, cssH); return; }
     if (min === max) { min -= 1; max += 1; }
 
+    // === Add vertical padding/breathing room ===
+    const span = max - min;
+    const padAmount = Math.max(span * CHART_Y_PAD_FRAC, 1e-6); // tiny fallback
+    const minP = min - padAmount;
+    const maxP = max + padAmount;
+
     // Layout
     const pad = { top: 12, right: 56, bottom: 22, left: 8 };
     const W = cssW, H = cssH;
@@ -206,7 +215,7 @@ function drawChart() {
 
     // Scales
     const xAt = i => x0 + (n <= 1 ? 0 : (PW * (i / (n - 1))));
-    const yAt = v => y0 + PH - ((v - min) / (max - min)) * PH;
+    const yAt = v => y0 + PH - ((v - minP) / (maxP - minP)) * PH;
 
     // Grid + right axis ticks
     ctx.font = "12px " + getComputedStyle(document.body).getPropertyValue("--mono");
@@ -214,16 +223,16 @@ function drawChart() {
     ctx.textBaseline = "middle";
     ctx.strokeStyle = "rgba(255,255,255,.1)";
     ctx.fillStyle = getComputedStyle(document.body).getPropertyValue("--text") || "#fff";
-    const ticks = niceTicks(min, max, 6);
+    const ticks = niceTicks(minP, maxP, 6);
     ticks.forEach(t => {
         const y = yAt(t);
         ctx.beginPath();
         ctx.moveTo(x0, y); ctx.lineTo(x0 + PW, y);
         ctx.stroke();
-        // right scale label
         const label = formatForAxis(t, keys);
         ctx.fillText(label, x0 + PW + 44, y);
     });
+
 
     // X min/max labels
     ctx.textAlign = "left"; ctx.textBaseline = "top";
@@ -255,7 +264,8 @@ function drawChart() {
     renderLegend(keys);
 
     // Hover interaction
-    bindChartHover(x0, y0, PW, PH, xAt, yAt, min, max);
+    bindChartHover(x0, y0, PW, PH, xAt, yAt, minP, maxP);
+
 }
 
 function drawEmpty(ctx, W, H) {
@@ -349,8 +359,15 @@ function bindChartHover(x0, y0, PW, PH, xAt, yAt, min, max) {
             html += `<div><span style="color:${cfg.color}">●</span> ${cfg.label}: ${formatted}</div>`;
         });
         tip.innerHTML = html;
-        tip.style.left = `${px + 10}px`;
+
+        // Clamp tooltip within the chart so it never triggers page horizontal scroll
+        const tipRect = tip.getBoundingClientRect(); // after setting tip.innerHTML
+        let tx = px + 10;
+        const maxLeft = rect.width - tipRect.width - 8; // 8px padding from right
+        if (tx > maxLeft) tx = Math.max(8, maxLeft);    // also keep a small left margin
+        tip.style.left = `${tx}px`;
         tip.style.top = `${y0 + 8}px`;
+
         tip.hidden = false;
     }
 
