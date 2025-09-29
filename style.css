@@ -780,3 +780,12 @@ body {
     outline: 1px dotted var(--text);
     outline-offset: 2px;
 }
+
+.chart-tooltip .ts {
+    margin-bottom: 4px;
+}
+
+/* Let JS position the tooltip; don't shift it with CSS */
+.chart-tooltip {
+    transform: none !important;
+}

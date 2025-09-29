@@ -344,31 +344,51 @@ function bindChartHover(x0, y0, PW, PH, xAt, yAt, min, max) {
             ctx.beginPath(); ctx.arc(px, py, 3, 0, Math.PI * 2); ctx.fill();
         });
 
-        // tooltip
-        const dt = new Date(rows[i].ts * 1000).toLocaleString();
-        let html = `<div><strong>${dt}</strong></div>`;
+        // Build tooltip HTML (timestamp + all selected series)
+        const dt = new Date(rows[i].ts * 1000);
+        const dtStr = dt.toLocaleString();
+        let html = `<div class="ts"><strong>${dtStr}</strong></div>`;
         keys.forEach(k => {
             const cfg = CHART_SERIES_DEF[k];
             const val = series[k]?.[i];
             if (val == null || !isFinite(val)) return;
-            const formatted =
-                k === "fee" ? cfg.fmt(val) :
-                    k === "breakeven" ? cfg.fmt(val) :
-                        (k === "mcap" || k === "breakeven_mc") ? cfg.fmt(val) :
-                            cfg.fmt(val);
-            html += `<div><span style="color:${cfg.color}">●</span> ${cfg.label}: ${formatted}</div>`;
+            html += `<div><span style="color:${cfg.color}">●</span> ${cfg.label}: ${cfg.fmt(val)}</div>`;
         });
         tip.innerHTML = html;
 
-        // Clamp tooltip within the chart so it never triggers page horizontal scroll
-        const tipRect = tip.getBoundingClientRect(); // after setting tip.innerHTML
-        let tx = px + 10;
-        const maxLeft = rect.width - tipRect.width - 8; // 8px padding from right
-        if (tx > maxLeft) tx = Math.max(8, maxLeft);    // also keep a small left margin
-        tip.style.left = `${tx}px`;
-        tip.style.top = `${y0 + 8}px`;
-
+        // show first so we can measure it
         tip.hidden = false;
+
+        // Clamp tooltip within the chart so it never overflows
+        const tipRect = tip.getBoundingClientRect();
+        const chartRect = canvas.getBoundingClientRect();
+
+        // Base positions relative to the canvas (same coords you used for mx/my)
+        let tx = px + 10;                 // prefer to the right of the cursor
+        let ty;                           // decide above/below based on space
+
+        // Flip above/below
+        const spaceAbove = (y0 + (my - y0));                // distance from top pad to mouse
+        const spaceBelow = (y0 + PH) - my;                  // distance from mouse to bottom pad
+        if (spaceBelow >= tipRect.height + 8) {
+            // place below the cursor
+            ty = my + 8;
+        } else if (spaceAbove >= tipRect.height + 8) {
+            // place above the cursor
+            ty = my - tipRect.height - 8;
+        } else {
+            // not enough space either way—anchor to inside the plot, below is nicer
+            ty = Math.min(y0 + PH - tipRect.height - 4, Math.max(y0 + 4, my + 8));
+        }
+
+        // Horizontal clamp (8px padding on both sides)
+        const maxLeft = (x0 + PW) - tipRect.width - 8;
+        tx = Math.max(x0 + 8, Math.min(tx, maxLeft));
+
+        // Apply
+        tip.style.left = `${tx}px`;
+        tip.style.top = `${ty}px`;
+
     }
 
     function onLeave() {
