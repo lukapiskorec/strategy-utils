@@ -43,7 +43,6 @@ const els = {
     step: document.getElementById("step"),
     rows: document.getElementById("rows"),
     start: document.getElementById("start"),
-    end: document.getElementById("end"),
     load: document.getElementById("load"),
     stop: document.getElementById("stop"),
     status: document.getElementById("status"),
@@ -63,11 +62,12 @@ const els = {
         contract: document.getElementById("ti-contract"),
         copyContract: document.getElementById("copy-contract"),
         scanLink: document.getElementById("scan-link"),
-
     },
     table: document.getElementById("prices"),
     colPicker: document.querySelector(".columns-picker"),
+    startAtLaunch: document.getElementById("start-at-launch"),
 };
+
 
 // ---- Global app state ----
 const state = {
@@ -80,6 +80,28 @@ const state = {
 };
 
 let aborter = null;
+
+async function prefillStartFromLaunch() {
+    if (!els.startAtLaunch?.checked) return;
+    const contract = getSelectedContract();
+    if (!contract) return;
+    try {
+        const json = await fetchTokenWithTopPools(FIXED_NETWORK, contract);
+        const launchTs = computeLaunchTsFromTokenJson(json);
+        if (launchTs) {
+            state.launchTs = launchTs;
+            els.start.value = dateToLocalInput(new Date(launchTs * 1000));
+        }
+    } catch (_) { /* ignore prefill errors */ }
+}
+
+function computeLaunchTsFromTokenJson(tokenJson) {
+    const pools = (tokenJson?.included || []).filter(x => x.type === "pool");
+    const tsList = pools
+        .map(p => Date.parse(p.attributes?.pool_created_at || "") / 1000)
+        .filter((x) => Number.isFinite(x));
+    return tsList.length ? Math.min(...tsList) : null;
+}
 
 async function copyTextToClipboard(text) {
     if (!text) return false;
@@ -314,6 +336,7 @@ function updateInfoBarFromToken(tokenJson, chosenPool) {
         .map(p => Date.parse(p.attributes?.pool_created_at || "") / 1000 || Infinity)
         .filter(x => Number.isFinite(x));
     const launchTs = tsList.length ? Math.min(...tsList) : (chosenPool?.createdAtISO ? Math.floor(Date.parse(chosenPool.createdAtISO) / 1000) : null);
+    state.launchTs = launchTs; // remember for “At Launch”
 
     const mcap = token.market_cap_usd ?? null;
     const fdv = token.fdv_usd ?? null;
@@ -409,29 +432,19 @@ async function loadPrices(e) {
             return;
         }
 
-        // 2) reset state
+        // Reset state for this load
         Object.assign(state, {
-            network,  // always "eth"
+            network,
             contract,
             tokenAttrs: null,
             chosenPool: null,
             mcapSupply: null,
+            launchTs: state.launchTs ?? null, // may be set by prefetch
         });
-
-        // Time range
-        const now = new Date();
-        const end = localInputToDate(els.end.value) || now;
-        const start = localInputToDate(els.start.value) || new Date(end.getTime() - 24 * 60 * 60 * 1000);
-        const startUnix = Math.floor(start.getTime() / 1000);
-        const endUnix = Math.floor(end.getTime() / 1000);
-        if (endUnix < startUnix) {
-            setStatus("End must be after Start.", false);
-            return;
-        }
 
         setStatus("Selecting pool…", true);
 
-        // 1) find top pools
+        // 1) Fetch token + pools first so we know Launch (proxy)
         const tokenJson = await fetchTokenWithTopPools(network, contract, signal);
         const chosen = pickMostLiquidPool(tokenJson, contract);
 
@@ -443,63 +456,60 @@ async function loadPrices(e) {
             return;
         }
 
+        // Update info bar (also sets state.launchTs internally)
         updateInfoBarFromToken(tokenJson, chosen);
 
         els.chipPool.textContent = `Pool: ${chosen.poolAddress.slice(0, 6)}…${chosen.poolAddress.slice(-4)}`;
         els.chipDex.textContent = `DEX: ${chosen.dexName || "—"}`;
         els.chipSide.textContent = `Token side: ${chosen.side}`;
 
-        setStatus("Fetching OHLCV…", true);
+        // 2) Now decide the time range
+        const now = new Date();
+        let startUnix;
 
-        // Compute how many raw candles to request
-        let rawLimit;
-        if (step.client10m) {
-            // Need 1m candles; request a bit more than needed for the range or N*10
-            const needByN = maxRows * 10;
-            const needByRange = Math.ceil((endUnix - startUnix) / 60); // minutes
-            rawLimit = Math.min(1000, Math.max(needByN, needByRange) + 10);
+        if (els.startAtLaunch?.checked && state.launchTs) {
+            startUnix = state.launchTs;
+            // reflect it in the input for transparency
+            els.start.value = dateToLocalInput(new Date(startUnix * 1000));
         } else {
-            const needByN = maxRows;
-            const needByRange = Math.ceil((endUnix - startUnix) / step.sec);
-            rawLimit = Math.min(1000, Math.max(needByN, needByRange) + 5);
+            const start = localInputToDate(els.start.value) || new Date(now.getTime() - 60 * 60 * 1000);
+            startUnix = Math.floor(start.getTime() / 1000);
         }
 
-        // before_timestamp near end, API returns up to `limit` candles ending before/at that time
-        const beforeTs = endUnix;
+        const endUnix = startUnix + (maxRows - 1) * step.sec; // implied end
+        setStatus("Fetching OHLCV…", true);
 
-        // 2) fetch OHLCV
+        // 3) Fetch OHLCV
+        const needByRange = Math.ceil((endUnix - startUnix) / (step.client10m ? 60 : step.sec));
+        const rawLimit = Math.min(1000,
+            (step.client10m ? Math.max(maxRows * 10, needByRange) + 10
+                : Math.max(maxRows, needByRange) + 5));
+
         const rawCandles = await fetchOHLCV({
             network,
             poolAddress: chosen.poolAddress,
             timeframe: step.tf,
             aggregate: step.client10m ? 1 : step.agg,
             limit: rawLimit,
-            beforeTs,
+            beforeTs: endUnix,
             side: chosen.side,
-            includeEmpty: true, // fill gaps if supported
+            includeEmpty: true,
             signal
         });
 
-        // We get reverse or forward? Normalize to ascending by timestamp:
         const asc = rawCandles.slice().sort((a, b) => a.ts - b.ts);
-
-        // Client 10m aggregation if needed
         const series = step.client10m ? aggregateTo10m(asc) : asc;
 
-        // Filter by range, then take the last N rows (closest to end)
         const inRange = series.filter(k => k.ts >= startUnix && k.ts <= endUnix);
-        const rows = inRange.slice(-maxRows);
+        const rows = inRange.slice(0, maxRows);
 
-        // Choose a reference price close to the end to derive supply (if needed)
+        // Supply for historical MCAP
         const refCandle = rows[rows.length - 1] || series[series.length - 1];
-        // Prefer token’s current price_usd if present (stable orientation), else last candle close.
         const refPrice = numOrNull((state.tokenAttrs || {}).price_usd) ?? (refCandle?.c ?? null);
-
-        // Derive/choose supply once per load (assumed constant over the selected range)
         state.mcapSupply = deriveSupplyForMcap(state.tokenAttrs || {}, refPrice);
 
         renderRows(rows);
-        const note = rows.length < maxRows ? ` (only ${rows.length} in range)` : "";
+        const note = rows.length < maxRows ? ` (only ${rows.length} available)` : "";
         setStatus(`Done. ${rows.length} rows shown${note}.`, false);
     } catch (err) {
         if (err.name === "AbortError") { setStatus("Stopped.", false); return; }
@@ -510,17 +520,23 @@ async function loadPrices(e) {
     }
 }
 
+
+
 // Wire up UI
 els.form.addEventListener("submit", loadPrices);
 els.stop.addEventListener("click", () => { if (aborter) aborter.abort(); });
 
-// Defaults
+
+// -----------INIT---------------
+
 (function init() {
     const now = new Date();
     initColumnPicker();
-    els.end.value = dateToLocalInput(now);
-    els.start.value = dateToLocalInput(new Date(now.getTime() - 60 * 60 * 1000)); // last 1h
-    setStatus("Ready. Set token + range, then Load.");
+
+    // Default start = last 1h
+    els.start.value = dateToLocalInput(new Date(now.getTime() - 60 * 60 * 1000));
+
+    setStatus("Ready. Pick strategy + set Start, Step, Rows, then Load.");
 
     // Copy contract to clipboard
     if (els.ti.copyContract) {
@@ -528,7 +544,6 @@ els.stop.addEventListener("click", () => { if (aborter) aborter.abort(); });
             const addr = getSelectedContract();
             if (!addr) return;
             const ok = await copyTextToClipboard(addr);
-            // tiny UX feedback via title
             const oldTitle = els.ti.copyContract.title || "Copy address";
             els.ti.copyContract.title = ok ? "Copied!" : "Copy failed";
             setTimeout(() => { els.ti.copyContract.title = oldTitle; }, 1200);
@@ -543,4 +558,13 @@ els.stop.addEventListener("click", () => { if (aborter) aborter.abort(); });
         cb.addEventListener("change", () => localStorage.setItem(key, String(cb.checked)));
     });
 
+    // prefill start from lunch field
+    if (els.startAtLaunch) {
+        els.startAtLaunch.addEventListener("change", prefillStartFromLaunch);
+    }
+    if (els.strategy) {
+        els.strategy.addEventListener("change", prefillStartFromLaunch);
+    }
+
 })();
+

@@ -16,8 +16,8 @@
     </header>
 
     <main class="container">
+        <!-- CONTROLS -->
         <form id="controls" class="controls" autocomplete="off">
-
             <div class="field">
                 <label for="strategy">Strategy</label>
                 <select id="strategy" name="strategy">
@@ -29,7 +29,7 @@
                     <option value="SquiggleStrategy">SquiggleStrategy</option>
                     <option value="ToadzStrategy">ToadzStrategy</option>
                 </select>
-                <small>Select a predefined strategy token. Contract shows in the info bar.</small>
+                <small>Pick a predefined strategy token.</small>
             </div>
 
             <div class="field">
@@ -55,12 +55,13 @@
             <div class="field">
                 <label for="start">Start</label>
                 <input id="start" name="start" type="datetime-local" />
-            </div>
-
-            <div class="field">
-                <label for="end">End</label>
-                <input id="end" name="end" type="datetime-local" />
-                <small>Leave empty for “now”.</small>
+                <div class="inline-check">
+                    <label>
+                        <input id="start-at-launch" type="checkbox" />
+                        At Launch
+                    </label>
+                    <small>(sets Start to “Launch (proxy)”)</small>
+                </div>
             </div>
 
             <div class="actions">
@@ -69,6 +70,7 @@
             </div>
         </form>
 
+        <!-- META -->
         <section class="meta">
             <div id="status" class="status">Ready.</div>
             <div id="provider" class="provider">Provider: GeckoTerminal Public API</div>
@@ -80,48 +82,53 @@
                 <span class="label">Name</span>
                 <span id="ti-name" class="value">—</span>
             </div>
+
             <div class="info-item">
                 <span class="label">Ticker</span>
                 <span id="ti-symbol" class="value">—</span>
             </div>
+
             <div class="info-item">
                 <span class="label">Contract (eth)</span>
                 <div class="addr-inline">
                     <code id="ti-contract" class="addr">—</code>
                     <button id="copy-contract" class="icon-btn" type="button" aria-label="Copy address"
                         title="Copy address">
-                        <!-- copy icon (SVG) -->
-                        <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
-                            <path
+                        <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                            <path fill="currentColor"
                                 d="M16 1H4a2 2 0 0 0-2 2v12h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11v14z" />
                         </svg>
                     </button>
-                    <a id="scan-link" class="icon-btn" href="#" target="_blank" rel="noopener"
+                    <a id="scan-link" class="icon-btn" href="#" target="_blank" rel="noopener noreferrer"
                         aria-label="View on Etherscan" title="View on Etherscan">
-                        <!-- external link icon (SVG) -->
-                        <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
-                            <path
+                        <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                            <path fill="currentColor"
                                 d="M14 3h7v7h-2V6.41l-9.29 9.3-1.42-1.42 9.3-9.29H14V3zM19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7z" />
                         </svg>
                     </a>
                 </div>
             </div>
+
             <div class="info-item">
                 <span class="label">Launch (proxy)</span>
                 <span id="ti-launch" class="value">—</span>
             </div>
+
             <div class="info-item">
                 <span class="label">Token age</span>
                 <span id="ti-age" class="value">—</span>
             </div>
+
             <div class="info-item">
                 <span class="label">Liquidity (USD)</span>
                 <span id="ti-liq" class="value">—</span>
             </div>
+
             <div class="info-item">
                 <span class="label">24h Volume (USD)</span>
                 <span id="ti-vol24" class="value">—</span>
             </div>
+
             <div class="info-item">
                 <span class="label">Market Cap (USD)</span>
                 <span id="ti-mcap" class="value">—</span>
@@ -129,25 +136,26 @@
         </section>
 
         <!-- COLUMN PICKER -->
-        <section class="columns-picker">
+        <section class="columns-picker" aria-label="Column visibility">
             <span>Columns:</span>
-            <label><input type="checkbox" data-col="timestamp" checked /> Timestamp</label>
-            <label><input type="checkbox" data-col="unix" /> Unix</label>
-            <label><input type="checkbox" data-col="open" /> Open</label>
-            <label><input type="checkbox" data-col="high" /> High</label>
-            <label><input type="checkbox" data-col="low" /> Low</label>
-            <label><input type="checkbox" data-col="close" checked /> Close</label>
-            <label><input type="checkbox" data-col="volume" checked /> Volume</label>
-            <label><input type="checkbox" data-col="mcap" checked /> Market Cap</label>
+            <label><input type="checkbox" data-col="timestamp" checked> Timestamp</label>
+            <label><input type="checkbox" data-col="unix"> Unix</label>
+            <label><input type="checkbox" data-col="open"> Open</label>
+            <label><input type="checkbox" data-col="high"> High</label>
+            <label><input type="checkbox" data-col="low"> Low</label>
+            <label><input type="checkbox" data-col="close" checked> Close</label>
+            <label><input type="checkbox" data-col="volume" checked> Volume</label>
+            <label><input type="checkbox" data-col="mcap" checked> Market Cap</label>
         </section>
 
-
+        <!-- POOL/DEX CHIPS -->
         <section class="chosen">
             <div id="chosen-pool" class="chip">Pool: —</div>
             <div id="chosen-dex" class="chip">DEX: —</div>
             <div id="token-side" class="chip">Token side: —</div>
         </section>
 
+        <!-- TABLE -->
         <section class="table-wrap">
             <table id="prices">
                 <thead>
@@ -165,12 +173,11 @@
                 </thead>
                 <tbody id="tbody"></tbody>
             </table>
-
         </section>
     </main>
 
     <footer class="app-footer">
-        <small>Data fetched from GeckoTerminal’s open endpoints.<br></small>
+        <small>Data fetched from GeckoTerminal’s open endpoints.</small><br>
         <small>MIT License, coded by Luka Piskorec with ChatGPT, 2025</small>
     </footer>
 

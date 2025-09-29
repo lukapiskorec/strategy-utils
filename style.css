@@ -29,6 +29,7 @@ body {
     line-height: 1.4;
 }
 
+/* Header & container */
 .app-header {
     padding: 28px 20px 8px;
     text-align: center;
@@ -51,27 +52,33 @@ body {
     padding: 0 16px;
 }
 
+/* Controls (form) */
 .controls {
     display: grid;
-    gap: 16px;
     grid-template-columns: repeat(12, 1fr);
+    gap: 10px;
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     box-shadow: var(--shadow);
-    padding: 16px;
+    padding: 10px;
 }
 
 .field {
-    grid-column: span 4;
+    grid-column: span 12;
+    /* 1-col by default */
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
+}
+
+.field label {
+    font-size: 12px;
 }
 
 .field small {
     color: var(--muted);
-    font-size: 12px;
+    font-size: 11px;
 }
 
 .field input[type="text"],
@@ -82,10 +89,11 @@ body {
     background: #0e1318;
     color: var(--text);
     border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 10px 12px;
+    border-radius: 8px;
+    padding: 8px 10px;
     outline: none;
     font-family: var(--mono);
+    font-size: 13px;
 }
 
 .field input::placeholder {
@@ -95,19 +103,20 @@ body {
 .actions {
     grid-column: span 12;
     display: flex;
-    gap: 10px;
+    gap: 8px;
     justify-content: flex-end;
-    margin-top: 4px;
+    margin-top: 0;
 }
 
 .btn {
     cursor: pointer;
-    padding: 10px 14px;
-    border-radius: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
     border: 1px solid var(--border);
     color: var(--text);
     background: #0e1318;
-    transition: transform .02s ease-in-out, border-color .15s ease, background .15s ease;
+    transition: transform .02s, border-color .15s, background .15s;
+    font-size: 13px;
 }
 
 .btn:hover {
@@ -143,11 +152,17 @@ body {
     text-decoration: underline;
 }
 
+/* Meta under the form */
 .meta {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin: 14px 2px;
+    margin: 10px 2px;
+}
+
+.status,
+.provider {
+    font-size: 12px;
 }
 
 .status {
@@ -162,23 +177,140 @@ body {
     color: var(--muted);
 }
 
+/* Chosen pool/dex chips */
 .chosen {
     display: flex;
-    gap: 8px;
-    margin: 10px 2px 16px;
+    gap: 6px;
+    margin: 8px 2px 12px;
     flex-wrap: wrap;
 }
 
 .chip {
-    padding: 6px 10px;
+    padding: 4px 8px;
     background: #0e1318;
     border: 1px solid var(--border);
     border-radius: 999px;
     color: #c7d4df;
     font-family: var(--mono);
+    font-size: 11px;
+}
+
+/* Info bar */
+.infobar {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 8px;
+    margin: 8px 2px 12px;
+}
+
+.infobar .info-item {
+    grid-column: span 12;
+    /* 1-col by default */
+    background: #0e1318;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    box-shadow: var(--shadow);
+}
+
+.infobar .label {
+    display: block;
+    color: var(--muted);
+    font-size: 11px;
+    margin-bottom: 2px;
+}
+
+.infobar .value {
+    font-family: var(--mono);
+    font-size: 13px;
+}
+
+/* Contract row + icons */
+.addr-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+}
+
+.addr-inline .addr {
+    font-family: var(--mono);
+    background: #0b1015;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 3px 6px;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: inline-block;
     font-size: 12px;
 }
 
+.icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 5px;
+    border: 1px solid rgba(255, 255, 255, .75);
+    background: rgba(255, 255, 255, .04);
+    color: #fff;
+    cursor: pointer;
+    padding: 0;
+    text-decoration: none;
+    transition: border-color .15s, background .15s, transform .02s;
+}
+
+.icon-btn:hover {
+    border-color: rgba(255, 255, 255, .95);
+    background: rgba(255, 255, 255, .08);
+}
+
+.icon-btn:active {
+    transform: translateY(1px);
+}
+
+.icon-btn svg {
+    display: block;
+    width: 12px;
+    height: 12px;
+}
+
+.icon-btn svg path {
+    fill: currentColor;
+}
+
+/* inherit .icon-btn color */
+
+/* Column picker */
+.columns-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin: 8px 2px 12px;
+    color: var(--muted);
+}
+
+.columns-picker label {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    background: #0e1318;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 4px 8px;
+    color: #c7d4df;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.columns-picker input {
+    accent-color: var(--accent);
+}
+
+/* Table */
 .table-wrap {
     background: var(--panel);
     border: 1px solid var(--border);
@@ -213,6 +345,7 @@ tbody tr:hover {
     background: rgba(76, 201, 240, .05);
 }
 
+/* Footer */
 .app-footer {
     max-width: 1100px;
     margin: 18px auto 48px;
@@ -221,83 +354,7 @@ tbody tr:hover {
     text-align: center;
 }
 
-@media (max-width: 900px) {
-    .field {
-        grid-column: span 6;
-    }
-}
-
-@media (max-width: 620px) {
-    .field {
-        grid-column: span 12;
-    }
-
-    .actions {
-        justify-content: stretch;
-    }
-
-    .btn {
-        flex: 1;
-    }
-}
-
-/* === Info Bar === */
-.infobar {
-    display: grid;
-    grid-template-columns: repeat(12, 1fr);
-    gap: 12px;
-    margin: 10px 2px 8px;
-}
-
-.infobar .info-item {
-    grid-column: span 4;
-    background: #0e1318;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 10px 12px;
-    box-shadow: var(--shadow);
-}
-
-.infobar .label {
-    display: block;
-    color: var(--muted);
-    font-size: 12px;
-    margin-bottom: 4px;
-}
-
-.infobar .value {
-    font-family: var(--mono);
-    font-size: 14px;
-}
-
-/* === Column Picker === */
-.columns-picker {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    align-items: center;
-    margin: 10px 2px 16px;
-    color: var(--muted);
-}
-
-.columns-picker label {
-    display: inline-flex;
-    gap: 6px;
-    align-items: center;
-    background: #0e1318;
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    padding: 6px 10px;
-    color: #c7d4df;
-    font-size: 12px;
-    cursor: pointer;
-}
-
-.columns-picker input {
-    accent-color: var(--accent);
-}
-
-/* === Column hide rules (toggle classes on table) === */
+/* Column hide rules (toggle classes on table) */
 table.hide-col-timestamp td[data-col="timestamp"],
 table.hide-col-timestamp th[data-col="timestamp"] {
     display: none;
@@ -338,74 +395,63 @@ table.hide-col-mcap th[data-col="mcap"] {
     display: none;
 }
 
-/* Responsive tweak for Info Bar */
-@media (max-width: 900px) {
+/* ===== Responsive grid spans =====
+   1-col  (default): span 12
+   2-cols (>= 600px): span 6
+   3-cols (>= 760px): span 4
+   4-cols (>=1000px): span 3
+*/
+@media (min-width: 600px) {
+
+    .controls .field,
     .infobar .info-item {
         grid-column: span 6;
     }
 }
 
-@media (max-width: 620px) {
+@media (min-width: 760px) {
+
+    .controls .field,
     .infobar .info-item {
-        grid-column: span 12;
+        grid-column: span 4;
     }
 }
 
-/* Address row and action icons */
-.addr-inline {
+@media (min-width: 1000px) {
+
+    .controls .field,
+    .infobar .info-item {
+        grid-column: span 3;
+    }
+}
+
+/* Buttons stretch on very narrow screens */
+@media (max-width: 620px) {
+    .actions {
+        justify-content: stretch;
+    }
+
+    .btn {
+        flex: 1;
+    }
+}
+
+.inline-check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 2px;
+}
+
+.inline-check label {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    white-space: nowrap;
+    font-size: 12px;
+    color: var(--text);
 }
 
-.addr-inline .addr {
-    font-family: var(--mono);
-    background: #0b1015;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 4px 8px;
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: inline-block;
-}
-
-/* brighter icon buttons */
-.icon-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 26px;
-    height: 26px;
-    border-radius: 6px;
-    border: 1px solid rgba(255, 255, 255, .75);
-    /* brighter line */
-    background: rgba(255, 255, 255, .04);
-    /* subtle lift */
-    color: #ffffff;
-    /* makes SVG white via currentColor */
-    cursor: pointer;
-    padding: 0;
-    transition: border-color .15s ease, background .15s ease, transform .02s ease-in-out;
-    text-decoration: none;
-}
-
-.icon-btn:hover {
-    border-color: rgba(255, 255, 255, .95);
-    background: rgba(255, 255, 255, .08);
-}
-
-.icon-btn:active {
-    transform: translateY(1px);
-}
-
-.icon-btn svg {
-    display: block;
-}
-
-/* make SVGs inherit from .icon-btn { color: ... } */
-.icon-btn svg path {
-  fill: currentColor;       /* for filled icons (your case) */
-  /* stroke: currentColor;  <-- use this instead if your icons are stroke-only */
+.inline-check small {
+    font-size: 11px;
+    color: var(--muted);
 }
