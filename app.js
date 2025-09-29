@@ -1,4 +1,4 @@
-/* Mini DEX Price Viewer — GeckoTerminal
+/* Strategy Utils - On-chain price analysis for NFTStrategy™ tokens via GeckoTerminal
    Flow:
     1) Load token (with top pools) for {network}:{tokenAddress}
     2) Pick the most liquid pool

@@ -1,4 +1,4 @@
-# Mini DEX Price Viewer — GeckoTerminal
+# 🦎📈 Strategy Utils
 
 A tiny vanilla-JS web app that shows on-chain token prices from **GeckoTerminal**.
 Pick a network + token contract, a time range, and a step (1m…1d). The app picks the most liquid pool, fetches OHLCV, and renders a table you can customize with a column picker. It also computes **historical Market Cap per row**.
@@ -7,7 +7,7 @@ Pick a network + token contract, a time range, and a step (1m…1d). The app pic
 
 ---
 
-## Features
+## ✨ Features
 
 * **DEX-native data (GeckoTerminal):** token metadata + top pools + pool OHLCV.
 * **Info bar** (snapshot): Name, Ticker, Launch (proxy), Token age, Liquidity (USD), 24h Volume (USD), Market Cap (USD / FDV fallback).
@@ -18,7 +18,7 @@ Pick a network + token contract, a time range, and a step (1m…1d). The app pic
 
 ---
 
-## Quick start
+## 🚀 Quick start
 
 ```bash
 # clone repo
@@ -41,7 +41,7 @@ Open [http://localhost:8080](http://localhost:8080) and:
 
 ---
 
-## File structure
+## 🗂️ File structure
 
 ```
 .
@@ -52,7 +52,7 @@ Open [http://localhost:8080](http://localhost:8080) and:
 
 ---
 
-## How it works
+## 🧠 How it works
 
 1. **Read inputs** from the form (network, contract, step, time range, rows).
 2. **Token + pools:** `GET /networks/{network}/tokens/{address}?include=top_pools`
@@ -71,20 +71,20 @@ Open [http://localhost:8080](http://localhost:8080) and:
 
 ---
 
-## Data & calculations
+## 📊 Data & calculations
 
-### Pool selection
+### 🧭 Pool selection
 
 * Pools from `include=top_pools`, sorted by `reserve_in_usd` (then h24 volume).
 * Determine token **side** (base/quote) from the pool; OHLCV is requested for the correct side so prices are in USD for the token.
 
-### Time steps
+### ⏱️ Time steps
 
 * `1m`, `5m`, `15m`, `1h`, `4h`, `12h`, `1d` come directly from OHLCV.
 * `10m` is computed by grouping 1m candles:
   Open = first open, Close = last close, High/Low = max/min, Volume = sum.
 
-### Historical Market Cap (per row)
+### 💰 Historical Market Cap (per row)
 
 We assume supply is **constant over the selected range**, estimated once per load:
 
@@ -103,7 +103,7 @@ Priority for **supply estimate** (tokens):
 
 ---
 
-## UI overview
+## 🖥️ UI overview
 
 * **Controls**: Network, Token contract, Step, Rows (N), Start/End, Load / Stop.
 * **Info bar**: Snapshot of token + liquidity/volume/mcap and a launch proxy (earliest pool creation seen on GeckoTerminal).
@@ -112,7 +112,7 @@ Priority for **supply estimate** (tokens):
 
 ---
 
-## Known limitations
+## ⚠️ Known limitations
 
 * **Supply drift** (mints/burns) isn’t modeled over time; we use a single supply estimate for the selected range. For tokens with rapidly changing supply, historical mcap will be approximate.
 * **Earliest pool as “launch”** is a proxy; actual token deploy time may differ.
@@ -121,25 +121,14 @@ Priority for **supply estimate** (tokens):
 
 ---
 
-## Extending
-
-* **Backfill** multiple OHLCV pages to cover long ranges with small steps.
-* **Secondary data source** (e.g., DexScreener, DefiLlama) for resilience.
-* **Live updates** (polling or websockets if/when available).
-* **Sparkline/Chart** with Canvas or `<svg>` (no libs needed).
-* **Persistent settings** in `localStorage`.
-* **Per-chain launch time** via explorers (contract creation block).
-
----
-
-## Security & privacy
+## 🔒 Security & privacy
 
 * No secrets in the browser; the app calls public endpoints directly.
 * Works on any static host (GitHub Pages, Netlify, Vercel static, S3, etc.).
 
 ---
 
-## Credits
+## 🙏 Credits
 
 Data fetched from GeckoTerminal’s open endpoints.
 Coded by Luka Piskorec with ChatGPT, 2025
