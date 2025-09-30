@@ -884,3 +884,29 @@ body {
 .container> :last-child {
     margin-bottom: 0 !important;
 }
+
+
+/* Left side of the meta row: status + live API rate */
+.meta-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* API rate meter */
+.rate {
+    font-size: 11px;
+    color: var(--muted);
+    white-space: nowrap;
+}
+
+.rate.warn {
+    color: #FFD400;
+}
+
+/* yellow near the limit */
+.rate.danger {
+    color: #FF6A6A;
+}
+
+/* red at/over the limit */

@@ -47,6 +47,7 @@ const els = {
     load: document.getElementById("load"),
     stop: document.getElementById("stop"),
     status: document.getElementById("status"),
+    rate: document.getElementById("rate"),
     tbody: document.getElementById("tbody"),
     ti: {
         wrap: document.getElementById("token-info"),
@@ -120,25 +121,18 @@ const PALETTE_MAX_CONTRAST_15 = [
     "#FF3B30", // red
 ];
 
-/*
-const PALETTE_MAX_CONTRAST_15 = [
-    "#00E5FF", // cyan
-    "#00A8FF", // azure
-    "#1A66FF", // blue
-    "#5A7DFF", // indigo
-    "#A259FF", // violet
-    "#FF1AD9", // magenta
-    "#FF5AB3", // pink
-    "#FF6A6A", // coral
-    "#00FFCC",  // turquoise
-    "#00FFA8", // spring green
-    "#39FF14", // green
-    "#A8FF3D", // chartreuse
-    "#FFD400", // yellow
-    "#FF7B00", // orange
-    "#FF3B30", // red
-];
-*/
+// Colors for single-token mode (metric -> color)
+const SINGLE_MODE_METRIC_COLORS = {
+    mcap: "#00E5FF", // cyan
+    close: "#00A8FF", // azure
+    open: "#1A66FF", // blue
+    high: "#5A7DFF", // indigo
+    low: "#A259FF", // violet
+    volume: "#FFD400", // yellow
+    fee: "#FF5AB3", // pink
+    breakeven: "#00FFCC", // turquoise
+    breakeven_mc: "#FF1AD9", // magenta
+};
 
 // Shuffle once per load
 const CHART_PALETTE = PALETTE_MAX_CONTRAST_15; //shuffledPalette(PALETTE_MAX_CONTRAST_15);
@@ -165,6 +159,42 @@ const state = {
 };
 
 let aborter = null;
+
+// ==== API rate meter (rolling last 60s) ====
+const API_RATE = {
+    limit: 30,           // GeckoTerminal public default
+    calls: [],           // Array<msTimestamp>
+    timer: null
+};
+
+function apiRatePrune() {
+    const cutoff = Date.now() - 60_000;
+    // Fast prune from front
+    while (API_RATE.calls.length && API_RATE.calls[0] < cutoff) API_RATE.calls.shift();
+}
+
+function apiRateRender() {
+    if (!els.rate) return;
+    apiRatePrune();
+    const n = API_RATE.calls.length;
+    const txt = `${n} API calls/min (${API_RATE.limit} allowed)`;
+    els.rate.textContent = txt;
+    els.rate.classList.toggle("warn", n >= Math.floor(API_RATE.limit * 0.8) && n < API_RATE.limit);
+    els.rate.classList.toggle("danger", n >= API_RATE.limit);
+}
+
+function apiRateRecord(count = 1) {
+    const now = Date.now();
+    for (let i = 0; i < count; i++) API_RATE.calls.push(now);
+    apiRateRender();
+}
+
+function apiRateInit() {
+    if (API_RATE.timer) return;
+    API_RATE.timer = setInterval(apiRateRender, 1000); // tick once a second
+    apiRateRender(); // initial paint
+}
+
 
 // Simple Math.random shuffle
 function shuffledPalette(base) {
@@ -610,19 +640,19 @@ function drawChart() {
     ctx.fillText(s1, x0 + PW - w, y0 + PH + 4);
 
     // get per-line style
+    // inside drawChart()
     const getStyle = (key) => {
-        // key might be "Strategy:metric" or just "metric"
         const seriesId = key.includes(":") ? key.split(":").pop() : key;
         const dash = SERIES_DASH_DEF[seriesId] || [];
         if (isAllMode) {
-            // color by strategy
+            // color by strategy (already set elsewhere), dash by metric
             const strat = key.includes(":") ? key.split(":")[0] : "";
             const color = (state.chart.strategyColors && state.chart.strategyColors[strat]) || "#fff";
             return { color, dash };
         } else {
             // single mode: color by metric, dash by metric
-            const cfg = CHART_SERIES_DEF[seriesId] || {};
-            return { color: cfg.color || "#fff", dash };
+            const color = SINGLE_MODE_METRIC_COLORS[seriesId] || "#00E5FF";
+            return { color, dash };
         }
     };
 
@@ -726,16 +756,14 @@ function bindChartHover(x0, y0, PW, PH, xAt, yAt, min, max) {
 
     // style resolver
     function getSeriesStyle(key) {
+        const seriesId = key.includes(":") ? key.split(":").pop() : key;
         if (isAllMode) {
-            const style = (state.chart.strokeStyles || {})[key];
-            if (style && style.color) return style;
-            const seriesId = key.includes(":") ? key.split(":").pop() : key;
-            const cfg = CHART_SERIES_DEF[seriesId] || {};
-            return { color: cfg.color || "#fff", dash: [] };
+            const strat = key.includes(":") ? key.split(":")[0] : "";
+            const color = (state.chart.strategyColors && state.chart.strategyColors[strat]) || "#fff";
+            return { color, dash: SERIES_DASH_DEF[seriesId] || [] };
         } else {
-            const seriesId = key.includes(":") ? key.split(":").pop() : key;
-            const cfg = CHART_SERIES_DEF[seriesId] || {};
-            return { color: cfg.color || "#fff", dash: [] };
+            const color = SINGLE_MODE_METRIC_COLORS[seriesId] || "#00E5FF";
+            return { color, dash: SERIES_DASH_DEF[seriesId] || [] };
         }
     }
 
@@ -1076,7 +1104,13 @@ function setStatus(t, busy = false) {
 function normAddr(a) { return (a || "").toLowerCase(); }
 
 async function gtFetch(path, { signal } = {}) {
-    const res = await fetch(`${API_ROOT}${path}`, { signal, headers: { "accept": "application/json" } });
+    // count this API request
+    apiRateRecord(1);
+
+    const res = await fetch(`${API_ROOT}${path}`, {
+        signal,
+        headers: { "accept": "application/json" }
+    });
     if (!res.ok) throw new Error(`HTTP ${res.status} ${path}`);
     return res.json();
 }
@@ -1398,6 +1432,9 @@ els.stop.addEventListener("click", () => { if (aborter) aborter.abort(); });
 
     // Default start = last 1h
     els.start.value = dateToLocalInput(new Date(now.getTime() - 60 * 60 * 1000));
+
+    // start the live API meter
+    apiRateInit();
 
     setStatus("Ready. Pick strategy + set Start, Step, Rows, then Load.");
 
