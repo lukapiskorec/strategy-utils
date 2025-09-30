@@ -1,7 +1,3 @@
-Here’s an updated `README.md` that keeps your original structure but reflects all the latest features — plus a GitHub Pages live link placeholder near the top.
-
----
-
 # 🦎📈 Strategy Utils
 
 A tiny vanilla-JS web app that shows on-chain token prices from **GeckoTerminal**.
