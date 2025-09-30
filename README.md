@@ -110,6 +110,13 @@ Open [http://localhost:8080](http://localhost:8080) and:
 
 ---
 
+## ⚠️ Disclaimer
+
+This app is an **analytics tool**, not financial, investment, trading, or legal advice.
+Always **do your own research (DYOR)** and consider consulting a licensed professional before making any investment decisions.
+
+---
+
 ## 🙏 Credits
 
 Data fetched from GeckoTerminal’s open endpoints.
