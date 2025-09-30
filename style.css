@@ -850,12 +850,13 @@ body {
     background: rgba(255, 0, 255, .06);
 }
 
-/* Small dash preview in legend (we reuse existing .chart-legend) */
+/* line segment used in legends to preview dash styles */
 .chart-legend .dash {
     display: inline-block;
     width: 18px;
     height: 0;
     border-top: 2px dashed currentColor;
+    /* overridden to solid when needed */
     margin-right: 6px;
 }
 

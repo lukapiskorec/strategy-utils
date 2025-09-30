@@ -73,17 +73,75 @@ els.chartLegend = document.getElementById("chart-legend");
 els.chartControls = document.querySelector(".chart-controls");
 
 // Series definitions for the chart
+// Keep only label + formatter (no colors needed)
 const CHART_SERIES_DEF = {
-    open: { label: "Open", color: "#7aa2ff", fmt: (v) => fmt(v) },
-    high: { label: "High", color: "#33ff99", fmt: (v) => fmt(v) },
-    low: { label: "Low", color: "#ff9f43", fmt: (v) => fmt(v) },
-    close: { label: "Close", color: "#00f0ff", fmt: (v) => fmt(v) },
-    volume: { label: "Volume", color: "#ffd166", fmt: (v) => fmt(v) },
-    mcap: { label: "Market Cap", color: "#ff00ff", fmt: (v) => fmtUSD(v) },
-    fee: { label: "Trading fee", color: "#39ff14", fmt: (v) => fmtPercent(v) },
-    breakeven: { label: "Breakeven x", color: "#ff4d4d", fmt: (v) => fmtMultiple(v) },
-    breakeven_mc: { label: "Breakeven MC", color: "#b967ff", fmt: (v) => fmtUSD(v) },
+    open: { label: "Open", fmt: v => fmt(v) },
+    high: { label: "High", fmt: v => fmt(v) },
+    low: { label: "Low", fmt: v => fmt(v) },
+    close: { label: "Close", fmt: v => fmt(v) },
+    volume: { label: "Volume", fmt: v => fmt(v) },
+    mcap: { label: "Market Cap", fmt: v => fmtUSD(v) },
+    fee: { label: "Trading fee", fmt: v => fmtPercent(v) },
+    breakeven: { label: "Breakeven x", fmt: v => fmtMultiple(v) },
+    breakeven_mc: { label: "Breakeven MC", fmt: v => fmtUSD(v) },
 };
+
+
+// Line dashes per metric (empty array = solid)
+const SERIES_DASH_DEF = {
+    mcap: [],                   // solid
+    close: [6, 3],              // long dash
+    open: [3, 3],               // medium dash
+    high: [8, 3, 2, 3],         // dash-dot
+    low: [2, 4],                // sparse
+    volume: [1, 2],             // dotted
+    fee: [10, 4],               // very long dash
+    breakeven: [6, 2, 2, 2],    // dash-dot-2
+    breakeven_mc: [4, 2],       // short dash
+};
+
+
+// Max-contrast 15 for dark backgrounds
+const PALETTE_MAX_CONTRAST_15 = [
+    "#00E5FF", // cyan
+    "#00A8FF", // azure
+    "#1A66FF", // blue
+    "#5A7DFF", // indigo
+    "#A259FF", // violet
+    "#FF1AD9", // magenta
+    "#FF5AB3", // pink
+    "#39FF14", // green
+    "#A8FF3D", // chartreuse
+    "#FFD400", // yellow
+    "#00FFCC",  // turquoise
+    "#00FFA8", // spring green
+    "#FF6A6A", // coral
+    "#FF7B00", // orange
+    "#FF3B30", // red
+];
+
+/*
+const PALETTE_MAX_CONTRAST_15 = [
+    "#00E5FF", // cyan
+    "#00A8FF", // azure
+    "#1A66FF", // blue
+    "#5A7DFF", // indigo
+    "#A259FF", // violet
+    "#FF1AD9", // magenta
+    "#FF5AB3", // pink
+    "#FF6A6A", // coral
+    "#00FFCC",  // turquoise
+    "#00FFA8", // spring green
+    "#39FF14", // green
+    "#A8FF3D", // chartreuse
+    "#FFD400", // yellow
+    "#FF7B00", // orange
+    "#FF3B30", // red
+];
+*/
+
+// Shuffle once per load
+const CHART_PALETTE = PALETTE_MAX_CONTRAST_15; //shuffledPalette(PALETTE_MAX_CONTRAST_15);
 
 // How much vertical breathing room around data (top & bottom), e.g. 8%
 const CHART_Y_PAD_FRAC = 0.08;
@@ -107,6 +165,16 @@ const state = {
 };
 
 let aborter = null;
+
+// Simple Math.random shuffle
+function shuffledPalette(base) {
+    const out = base.slice();
+    for (let i = out.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1)); // 0..i
+        [out[i], out[j]] = [out[j], out[i]];
+    }
+    return out;
+}
 
 function createTimeGrid(startUnix, endUnix, stepSec) {
     const out = [];
@@ -281,10 +349,16 @@ function buildChartDataMulti(seriesKeys, stratKeys) {
     const combined = {};       // "<strategy>:<series>" -> array of length N
     const combinedKeys = [];
 
-    const dashBook = [[], [6, 3], [3, 3], [8, 3, 2, 3], [2, 4], [1, 2]];
+    state.chart.strategyColors = state.chart.strategyColors || {};
     state.chart.strokeStyles = {}; // reset style map
 
     stratKeys.forEach((sk, si) => {
+        // stable color assignment per strategy key
+        if (!state.chart.strategyColors[sk]) {
+            state.chart.strategyColors[sk] = CHART_PALETTE[si % CHART_PALETTE.length];
+        }
+        const stratColor = state.chart.strategyColors[sk];
+
         const ds = dsMap[sk];
         if (!ds) return;
         const supply = ds.supply;
@@ -330,8 +404,10 @@ function buildChartDataMulti(seriesKeys, stratKeys) {
             }
 
             combined[key] = arr;
-            const cfg = CHART_SERIES_DEF[ser];
-            state.chart.strokeStyles[key] = { color: (cfg?.color || "#fff"), dash: dashBook[si % dashBook.length] };
+
+            // === NEW: color by strategy, dash by metric ===
+            const dash = SERIES_DASH_DEF[ser] || [];
+            state.chart.strokeStyles[key] = { color: stratColor, dash };
         }
     });
 
@@ -339,8 +415,9 @@ function buildChartDataMulti(seriesKeys, stratKeys) {
     state.chart.rows = grid.map(ts => ({ ts }));
     state.chart.seriesCombined = combined;
     state.chart.combinedKeys = combinedKeys;
-    // IMPORTANT: keep state.chart.seriesKeys = the metric list (unchanged)
+    // NOTE: keep state.chart.seriesKeys = the metric list (unchanged)
 }
+
 
 
 function getCheckedSeriesKeys() {
@@ -468,18 +545,16 @@ function drawChart() {
     const rows = state.chart.rows || [];
     const n = rows.length;
 
-    // detect ALL-mode (overlay) by presence of datasets and combined keys
+    // ALL-mode = overlay
     const isAllMode = !!(state.datasets && Object.keys(state.datasets || {}).length) && Array.isArray(state.chart.combinedKeys);
     const keys = isAllMode ? (state.chart.combinedKeys || []) : (state.chart.seriesKeys || []);
     const series = isAllMode ? (state.chart.seriesCombined || {}) : (state.chart.series || {});
 
     if (!n || !keys.length) {
         drawEmpty(ctx, cssW, cssH);
-        // still draw a left axis line so it's not "empty"
         const pad = { top: 12, right: 56, bottom: 22, left: 8 };
         ctx.strokeStyle = "rgba(255,255,255,.1)";
         ctx.beginPath(); ctx.moveTo(pad.left, pad.top); ctx.lineTo(pad.left, cssH - pad.bottom); ctx.stroke();
-        // bind hover to a harmless noop scale
         return bindChartHover(pad.left, pad.top, cssW - pad.left - pad.right, cssH - pad.top - pad.bottom,
             i => 0, v => 0, 0, 1);
     }
@@ -517,8 +592,8 @@ function drawChart() {
     ctx.textBaseline = "middle";
     ctx.strokeStyle = "rgba(255,255,255,.1)";
     ctx.fillStyle = getComputedStyle(document.body).getPropertyValue("--text") || "#fff";
-    const ticks = niceTicks(minP, maxP, 6);
     const axisKeys = isAllMode ? keys.map(k => k.includes(":") ? k.split(":").pop() : k) : keys;
+    const ticks = niceTicks(minP, maxP, 6);
     ticks.forEach(t => {
         const y = yAt(t);
         ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x0 + PW, y); ctx.stroke();
@@ -534,14 +609,21 @@ function drawChart() {
     const w = ctx.measureText(s1).width;
     ctx.fillText(s1, x0 + PW - w, y0 + PH + 4);
 
-    // line style helper
+    // get per-line style
     const getStyle = (key) => {
-        if (!isAllMode) {
-            const plain = key.includes(":") ? key.split(":").pop() : key;
-            const cfg = CHART_SERIES_DEF[plain] || {};
-            return { color: cfg.color || "#fff", dash: [] };
+        // key might be "Strategy:metric" or just "metric"
+        const seriesId = key.includes(":") ? key.split(":").pop() : key;
+        const dash = SERIES_DASH_DEF[seriesId] || [];
+        if (isAllMode) {
+            // color by strategy
+            const strat = key.includes(":") ? key.split(":")[0] : "";
+            const color = (state.chart.strategyColors && state.chart.strategyColors[strat]) || "#fff";
+            return { color, dash };
+        } else {
+            // single mode: color by metric, dash by metric
+            const cfg = CHART_SERIES_DEF[seriesId] || {};
+            return { color: cfg.color || "#fff", dash };
         }
-        return (state.chart.strokeStyles && state.chart.strokeStyles[key]) || { color: "#fff", dash: [] };
     };
 
     // lines
@@ -563,32 +645,32 @@ function drawChart() {
     });
     ctx.setLineDash([]);
 
-    // legends
-    renderLegend(getCheckedSeriesKeys()); // metric legend
-    // strategy dash legend (only in ALL mode)
+    // === Legends ===
+    renderMetricLegend(getCheckedSeriesKeys()); // dash-only legend per metric
+
     if (isAllMode && els.chartLegend) {
+        // strategy color legend
         const stratKeys = getCheckedStrategyKeys();
         if (stratKeys.length) {
-            const dashBook = [[], [6, 3], [3, 3], [8, 3, 2, 3], [2, 4], [1, 2]];
-            const stratLegend = document.createElement("div");
-            stratLegend.style.marginTop = "6px";
-            stratLegend.style.display = "flex";
-            stratLegend.style.flexWrap = "wrap";
-            stratLegend.style.gap = "8px";
-            stratLegend.style.alignItems = "center";
-            stratLegend.style.fontSize = "11px";
-            stratLegend.style.color = getComputedStyle(document.body).getPropertyValue("--muted") || "#ccc";
-            stratKeys.forEach((sk, si) => {
+            const wrap = document.createElement("div");
+            wrap.style.marginTop = "6px";
+            wrap.style.display = "flex";
+            wrap.style.flexWrap = "wrap";
+            wrap.style.gap = "8px";
+            wrap.style.alignItems = "center";
+            wrap.style.fontSize = "11px";
+            wrap.style.color = getComputedStyle(document.body).getPropertyValue("--muted") || "#ccc";
+            stratKeys.forEach(sk => {
                 const sw = document.createElement("span");
-                sw.style.color = "#ff1ad9";
-                sw.innerHTML = `<span class="dash" style="border-top-style:${(dashBook[si % dashBook.length].length ? 'dashed' : 'solid')}"></span>${sk}`;
-                stratLegend.appendChild(sw);
+                const color = (state.chart.strategyColors && state.chart.strategyColors[sk]) || "#fff";
+                sw.innerHTML = `<span class="swatch" style="background:${color}"></span>${sk}`;
+                wrap.appendChild(sw);
             });
-            els.chartLegend.appendChild(stratLegend);
+            els.chartLegend.appendChild(wrap);
         }
     }
 
-    // hover (uses padded range)
+    // hover
     bindChartHover(x0, y0, PW, PH, xAt, yAt, minP, maxP);
 }
 
@@ -598,15 +680,27 @@ function drawEmpty(ctx, W, H) {
     ctx.fillText("No data to plot.", 8, 8);
 }
 
-function renderLegend(keys) {
+function renderMetricLegend(metricKeys) {
     if (!els.chartLegend) return;
-    els.chartLegend.innerHTML = "";
-    keys.forEach(k => {
-        const cfg = CHART_SERIES_DEF[k];
+    // First row: metric dashes (no colors)
+    const row = document.createElement("div");
+    row.style.display = "flex";
+    row.style.flexWrap = "wrap";
+    row.style.gap = "8px";
+    row.style.alignItems = "center";
+    row.style.fontSize = "11px";
+    row.style.color = getComputedStyle(document.body).getPropertyValue("--muted") || "#ccc";
+
+    metricKeys.forEach(k => {
+        const cfg = CHART_SERIES_DEF[k] || { label: k };
+        const dash = SERIES_DASH_DEF[k] || [];
         const item = document.createElement("span");
-        item.innerHTML = `<span class="swatch" style="background:${cfg.color}"></span>${cfg.label}`;
-        els.chartLegend.appendChild(item);
+        const style = dash.length ? 'dashed' : 'solid';
+        item.innerHTML = `<span class="dash" style="border-top-style:${style}"></span>${cfg.label}`;
+        row.appendChild(item);
     });
+
+    els.chartLegend.appendChild(row);
 }
 
 function formatForAxis(v, keys) {
