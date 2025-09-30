@@ -1,7 +1,13 @@
+Here’s an updated `README.md` that keeps your original structure but reflects all the latest features — plus a GitHub Pages live link placeholder near the top.
+
+---
+
 # 🦎📈 Strategy Utils
 
 A tiny vanilla-JS web app that shows on-chain token prices from **GeckoTerminal**.
-Pick a network + token contract, a time range, and a step (1m…1d). The app picks the most liquid pool, fetches OHLCV, and renders a table you can customize with a column picker. It also computes **historical Market Cap per row**.
+Pick a predefined **Strategy** (Ethereum) or **COMPARE ALL**, a start time and step (1m…1d). The app picks the most liquid pool, fetches OHLCV, and renders a customizable table with **historical Market Cap per row** and extra metrics.
+
+**Live demo:** [https://lukapiskorec.github.io/strategy-utils/](https://lukapiskorec.github.io/strategy-utils/) *(GitHub Pages)*
 
 > No build tools, no dependencies, no API keys. Just open with any static web server.
 
@@ -10,11 +16,19 @@ Pick a network + token contract, a time range, and a step (1m…1d). The app pic
 ## ✨ Features
 
 * **DEX-native data (GeckoTerminal):** token metadata + top pools + pool OHLCV.
-* **Info bar** (snapshot): Name, Ticker, Launch (proxy), Token age, Liquidity (USD), 24h Volume (USD), Market Cap (USD / FDV fallback).
-* **Historical table:** Timestamp, Unix, Open, High, Low, Close, Volume, **Market Cap** (per row).
-* **Column picker:** Toggle any table column.
+* **Strategies on Ethereum:** quick-select from a predefined list, or **COMPARE ALL** to overlay multiple strategies on one chart.
+* **Info bar** (snapshot): Name, Ticker, Launch (proxy), Token age, Liquidity (USD), 24h Volume (USD), Market Cap (USD / FDV fallback), **Contract** (copy & Etherscan).
+* **Historical table:** Timestamp, Unix, Open, High, Low, Close, Volume, **Market Cap**, **Trading fee %**, **Breakeven ×**, **Breakeven MC**.
+* **Column picker:** Toggle any table column; themed scrollbars; fixed-height scrollable table.
+* **Chart overlays:**
+
+  * **Color = Strategy**, **Dash = Metric** (in COMPARE ALL),
+  * Hover tooltip with **timestamp + values**, clamped inside the chart,
+  * Right-side value axis, Y-padding for breathing room,
+  * **Aligned time grid** across strategies (no trimming when switching tabs).
 * **Flexible steps:** 1m, 5m, **10m** (client-aggregated), 15m, 1h, 4h, 12h, 1d.
-* **Two requests per load:** 1) token (+top pools) 2) OHLCV for the chosen pool.
+* **Request budget:** Single token → **2 requests**; COMPARE ALL → **2 × N** requests.
+* **Live API meter:** “*X API calls/min (30 allowed)*” auto-updates and decays over 60s.
 
 ---
 
@@ -34,10 +48,13 @@ npx serve -p 8080
 
 Open [http://localhost:8080](http://localhost:8080) and:
 
-1. Choose **Network** (e.g., `eth`, `bsc`, `polygon_pos`, `arbitrum`, `base`, `avax`, `optimism`, `solana`).
-2. Paste **Token contract** (checksummed or lowercase is fine).
-3. Pick **Step**, **Rows (N)**, and optional **Start/End**.
+1. Choose **Strategy** (or **COMPARE ALL**).
+2. Pick **Step** and **Rows (N)**.
+   *(End time is auto-calculated from Start + Step × (N-1))*
+3. Set **Start** or tick **At Launch** to auto-use the launch proxy time.
 4. Click **Load prices**.
+5. Use **Column picker** to show/hide table columns.
+6. Use **Chart** checkboxes (metrics) and **Tokens** checkboxes (strategies) to control overlays.
 
 ---
 
@@ -45,85 +62,54 @@ Open [http://localhost:8080](http://localhost:8080) and:
 
 ```
 .
-├── index.html   # UI skeleton and layout
-├── style.css    # Dark minimal theme + responsive styles
-└── app.js       # All logic: fetch, state, transforms, rendering
+├── index.html   # UI skeleton and layout (controls, info bar, tabs, chart)
+├── style.css    # Dark theme (retro-magenta), responsive grid, scrollbars
+└── app.js       # All logic: fetch, rate meter, state, transforms, rendering
 ```
 
 ---
 
 ## 🧠 How it works
 
-1. **Read inputs** from the form (network, contract, step, time range, rows).
-2. **Token + pools:** `GET /networks/{network}/tokens/{address}?include=top_pools`
-
-   * Used for name, symbol, decimals, (normalized) supplies, market cap/FDV,
-     total liquidity, 24h volume, and pool discovery.
+1. **Read inputs** from the form (strategy/COMPARE ALL, step, start, rows).
+2. **Token + pools:** `GET /networks/eth/tokens/{address}?include=top_pools`
+   Used for name/symbol/decimals/supplies, mcap/FDV, liquidity, 24h volume, and pool discovery.
 3. **Pick pool:** choose the most liquid pool (fallback: highest 24h volume).
-4. **OHLCV:** `GET /networks/{network}/pools/{pool}/ohlcv/{timeframe}?aggregate=…&currency=usd&token=base|quote&limit=…&before_timestamp=…`
+4. **OHLCV:**
+   `GET /networks/eth/pools/{pool}/ohlcv/{timeframe}?aggregate=…&currency=usd&token=base|quote&limit=…&before_timestamp=…`
 
-   * For **10m** we fetch **1m** and aggregate client-side.
-5. **Historical Market Cap per row:**
-   `MCAP(ts) = close_price_usd(ts) × supply_estimate`
-6. **Render:** info bar + table; column picker toggles CSS classes to show/hide columns.
-
-**Request budget:** always 2 requests per “Load prices”. Default rate limit on GeckoTerminal is ~30 req/min, so you’re well within it.
-
----
-
-## 📊 Data & calculations
-
-### 🧭 Pool selection
-
-* Pools from `include=top_pools`, sorted by `reserve_in_usd` (then h24 volume).
-* Determine token **side** (base/quote) from the pool; OHLCV is requested for the correct side so prices are in USD for the token.
-
-### ⏱️ Time steps
-
-* `1m`, `5m`, `15m`, `1h`, `4h`, `12h`, `1d` come directly from OHLCV.
-* `10m` is computed by grouping 1m candles:
-  Open = first open, Close = last close, High/Low = max/min, Volume = sum.
-
-### 💰 Historical Market Cap (per row)
-
-We assume supply is **constant over the selected range**, estimated once per load:
-
-Priority for **supply estimate** (tokens):
-
-1. `normalized_circulating_supply`
-2. `circulating_supply` (assumed normalized)
-3. `normalized_total_supply`
-4. `total_supply / 10^decimals` (app normalizes using `decimals`)
-5. `market_cap_usd / refPrice`
-6. `fdv_usd / refPrice`
-
-`refPrice` = token’s current `price_usd` if available, else the last candle’s close.
-
-> Info bar uses **current** Market Cap (or FDV), while the table shows **historical** Market Cap computed from the candle close at each timestamp × supply estimate.
+   * For **10m**, fetch **1m** and aggregate client-side.
+5. **Supply estimate** once per load (see below), then compute **MCAP(ts) = close_usd(ts) × supply** per row.
+6. **COMPARE ALL:** build a **canonical time grid** from Start→End so every strategy aligns by **timestamp** (missing points = gaps, not trims).
+7. **Render:** info bar + table + chart overlays. Legends: **metric = dash**; **strategy = color**.
+8. **API rate meter:** every fetch records a timestamp; a 1s ticker shows “*X API calls/min (30 allowed)*”.
 
 ---
 
 ## 🖥️ UI overview
 
-* **Controls**: Network, Token contract, Step, Rows (N), Start/End, Load / Stop.
-* **Info bar**: Snapshot of token + liquidity/volume/mcap and a launch proxy (earliest pool creation seen on GeckoTerminal).
-* **Column picker**: Checkboxes to show/hide columns.
-* **Table**: Sticky header, progressive render, responsive.
+* **Controls**: Strategy (or COMPARE ALL), Step, Rows (N), Start (+ **At Launch**), Load / Stop.
+  *No End input; it’s auto-calculated.*
+* **Meta row**: status + **API rate meter** on the left; provider on the right.
+* **Info bar**: Name, Symbol, Launch (proxy), Age, Liquidity, 24h Volume, Market Cap, **Contract** (copy + Etherscan).
+* **Tabs** (COMPARE ALL): switch which strategy’s **table** is visible; the **chart** stays aligned and overlaid.
+* **Chart**: color-by-strategy; dash-by-metric; hover tooltip with timestamp; right axis; Y-padding; no horizontal scroll.
+* **Column picker**: show/hide columns; themed scrollbars; compact, responsive layout.
 
 ---
 
 ## ⚠️ Known limitations
 
-* **Supply drift** (mints/burns) isn’t modeled over time; we use a single supply estimate for the selected range. For tokens with rapidly changing supply, historical mcap will be approximate.
-* **Earliest pool as “launch”** is a proxy; actual token deploy time may differ.
-* If a token or pool is newly created, indexing latency may cause sparse data.
-* No pagination/backfill across multiple OHLCV requests yet (kept intentionally simple).
+* **Supply drift** (mints/burns) isn’t modeled over time; we use a single supply estimate for the selected range.
+* **Launch time** is proxied by earliest pool creation on GeckoTerminal; deploy time may differ.
+* Newly created tokens/pools may have sparse data due to indexing latency.
+* No multi-page backfill of OHLCV yet (kept intentionally simple).
 
 ---
 
 ## 🔒 Security & privacy
 
-* No secrets in the browser; the app calls public endpoints directly.
+* No secrets; the app calls public endpoints directly from the browser.
 * Works on any static host (GitHub Pages, Netlify, Vercel static, S3, etc.).
 
 ---
@@ -131,5 +117,5 @@ Priority for **supply estimate** (tokens):
 ## 🙏 Credits
 
 Data fetched from GeckoTerminal’s open endpoints.
-Coded by Luka Piskorec with ChatGPT, 2025
-MIT License. See `LICENSE` file.
+Coded by Luka Piskorec with ChatGPT, 2025.
+MIT License. See `LICENSE`.
