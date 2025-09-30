@@ -160,6 +160,39 @@ const state = {
 
 let aborter = null;
 
+const DEFAULT_METRICS = ["close", "mcap"];
+
+function getMetricKeysOrDefault() {
+    const chosen = getCheckedSeriesKeys();
+    return (chosen && chosen.length) ? chosen : DEFAULT_METRICS.slice();
+}
+
+// Hide/show columns in the table based on state.hiddenCols
+function applyColumnVisibility() {
+    const hide = state.hiddenCols || new Set();
+
+    // headers
+    document.querySelectorAll('#prices thead th[data-col]').forEach(th => {
+        const col = th.getAttribute('data-col');
+        th.style.display = hide.has(col) ? 'none' : '';
+    });
+
+    // body cells
+    els.tbody.querySelectorAll('td[data-col]').forEach(td => {
+        const col = td.getAttribute('data-col');
+        td.style.display = hide.has(col) ? 'none' : '';
+    });
+}
+
+function currentTableRows() {
+    // In COMPARE ALL, table shows the active tab's rows
+    if (state.datasets && state.activeTableKey && state.datasets[state.activeTableKey]) {
+        return state.datasets[state.activeTableKey].rows || [];
+    }
+    // Single-token mode uses the chart rows (same structure)
+    return state.chart.rows || [];
+}
+
 // ==== API rate meter (rolling last 60s) ====
 const API_RATE = {
     limit: 30,           // GeckoTerminal public default
@@ -460,24 +493,22 @@ function getCheckedSeriesKeys() {
 }
 
 function rebuildChartFromControls() {
-    const metricKeys = getCheckedSeriesKeys();               // e.g., ["close","mcap"]
+    const metricKeys = getMetricKeysOrDefault();         // <-- fallback to defaults
     const isAllMode = !!(state.datasets && Object.keys(state.datasets).length);
 
     if (isAllMode) {
-        const stratKeys = getCheckedStrategyKeys();            // selected strategies
-        // If nothing selected, show nothing (axes still draw).
-        state.chart.seriesKeys = metricKeys.slice();           // store chosen metrics (used by builder)
-        buildChartDataMulti(metricKeys, stratKeys);            // (re)build combined series
+        const stratKeys = getCheckedStrategyKeys();
+        state.chart.seriesKeys = metricKeys.slice();
+        buildChartDataMulti(metricKeys, stratKeys);
     } else {
-        // single token
         state.chart.seriesKeys = metricKeys.slice();
         const rows = (state.datasets && state.activeTableKey && state.datasets[state.activeTableKey])
             ? (state.datasets[state.activeTableKey].rows || [])
             : (state.chart.rows || []);
-        buildChartData(rows);                                  // your existing single-token builder
+        buildChartData(rows);
     }
 
-    drawChart();                                             // always redraw
+    drawChart();
 }
 
 function wireChartControlHandlers() {
@@ -1270,25 +1301,38 @@ function renderRows(rows) {
     });
 
     els.tbody.appendChild(frag);
+
+    // <-- ensure visibility matches current checkboxes
+    applyColumnVisibility();
 }
 
+
+// Build hiddenCols from the actual checkbox states (no persistence)
 function initColumnPicker() {
     if (!els.colPicker) return;
-    els.colPicker.addEventListener("change", () => {
-        const hidden = new Set();
+
+    // helper: read current UI and update state.hiddenCols
+    const applyFromUI = () => {
+        state.hiddenCols = new Set();
         els.colPicker.querySelectorAll('input[type="checkbox"][data-col]').forEach(cb => {
-            if (!cb.checked) hidden.add(cb.getAttribute("data-col"));
+            const col = cb.dataset.col;
+            if (!cb.checked) state.hiddenCols.add(col); // unchecked => hidden
         });
-        state.hiddenCols = hidden;
+    };
 
-        const allKeys = ["timestamp", "unix", "open", "high", "low", "close", "volume", "mcap", "fee", "breakeven", "breakeven_mc"];
-        allKeys.forEach(k => {
-            els.table.classList.toggle(`hide-col-${k}`, hidden.has(k));
-        });
+    // apply now so initial state matches HTML defaults
+    applyFromUI();
+    // and immediately reflect in the table (if any rows are present)
+    applyColumnVisibility();
+
+    // keep state in sync on any change, and re-render the visible table
+    els.colPicker.addEventListener('change', () => {
+        applyFromUI();
+        renderRows(currentTableRows()); // render + apply visibility
+        drawChart();                    // <-- ensure chart stays in sync
     });
-    els.colPicker.dispatchEvent(new Event("change")); // apply once so defaults take effect without user interaction
-}
 
+}
 
 async function loadPrices(e) {
     e?.preventDefault?.();
@@ -1365,7 +1409,7 @@ async function loadPrices(e) {
             renderRows(first.rows || []);
 
             // Chart overlays
-            state.chart.seriesKeys = getCheckedSeriesKeys();   // metric keys
+            state.chart.seriesKeys = getMetricKeysOrDefault(); // metric keys (fallback to defaults)
             renderStrategyCheckboxes(loadedKeys);              // tokens toggles
             const stratKeys = getCheckedStrategyKeys();
             buildChartDataMulti(state.chart.seriesKeys, stratKeys);
@@ -1399,7 +1443,7 @@ async function loadPrices(e) {
         // Single chart
         state.chart.timeGrid = null;
         state.chart.rows = ds.rows || [];
-        state.chart.seriesKeys = getCheckedSeriesKeys();
+        state.chart.seriesKeys = getMetricKeysOrDefault();
         buildChartData(ds.rows || []);
         drawChart();
 
@@ -1449,14 +1493,6 @@ els.stop.addEventListener("click", () => { if (aborter) aborter.abort(); });
             setTimeout(() => { els.ti.copyContract.title = oldTitle; }, 1200);
         });
     }
-
-    // remember checks per column
-    els.colPicker.querySelectorAll('input[type="checkbox"][data-col]').forEach(cb => {
-        const key = `col:${cb.dataset.col}`;
-        const saved = localStorage.getItem(key);
-        if (saved !== null) cb.checked = saved === "true";
-        cb.addEventListener("change", () => localStorage.setItem(key, String(cb.checked)));
-    });
 
     // "At Launch" wiring
     if (els.startAtLaunch) els.startAtLaunch.addEventListener("change", prefillStartFromLaunch);
