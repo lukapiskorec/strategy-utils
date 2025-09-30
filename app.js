@@ -33,6 +33,7 @@ const STRATEGIES = {
     DickStrategy: "0x8680acfacb3fed5408764343fc7e8358e8c85a4c",
     ApeStrategy: "0x9ebf91b8d6ff68aa05545301a3d0984eaee54a03",
     PudgyStrategy: "0xb3d6e9e142a785ea8a4f0050fee73bcc3438c5c5",
+    MeebitStrategy: "0xc9b2c00f31b210fcea1242d91307a5b1e3b2be68",
     SquiggleStrategy: "0x742fd09cbbeb1ec4e3d6404dfc959a324deb50e6",
     ToadzStrategy: "0x92cedfdbce6e87b595e4a529afa2905480368af4",
 };
@@ -107,13 +108,292 @@ const state = {
 
 let aborter = null;
 
+function createTimeGrid(startUnix, endUnix, stepSec) {
+    const out = [];
+    for (let t = startUnix; t <= endUnix + 1e-9; t += stepSec) out.push(t | 0);
+    return out;
+}
+
+function renderStrategyCheckboxes(keys) {
+    const wrap = document.getElementById("chart-strategy-controls");
+    if (!wrap) return;
+    wrap.innerHTML = "";
+    if (!keys.length) { wrap.hidden = true; return; }
+    wrap.hidden = false;
+
+    const title = document.createElement("span");
+    title.textContent = "Tokens:";
+    wrap.appendChild(title);
+
+    keys.forEach(k => {
+        const id = `cs-${k}`;
+        const label = document.createElement("label");
+        label.setAttribute("for", id);
+        label.innerHTML = `<input type="checkbox" id="${id}" data-strat="${k}" checked> ${k}`;
+        wrap.appendChild(label);
+    });
+    // Event delegation (persistent). No { once:true }.
+    wrap.onchange = () => rebuildChartFromControls();
+}
+
+function getCheckedStrategyKeys() {
+    const wrap = document.getElementById("chart-strategy-controls");
+    if (!wrap) return Object.keys(state.datasets || {});
+    const keys = [];
+    wrap.querySelectorAll('input[type="checkbox"][data-strat]').forEach(cb => {
+        if (cb.checked) keys.push(cb.getAttribute("data-strat"));
+    });
+    return keys;
+}
+
+function renderInfoBarFromDataset(ds) {
+    const t = ds.tokenAttrs || {};
+    const mcap = t.market_cap_usd ?? null;
+    const fdv = t.fdv_usd ?? null;
+    const mcapText = mcap != null ? fmtUSD(mcap) : (fdv != null ? `${fmtUSD(fdv)} (FDV)` : "—");
+
+    els.ti.name.textContent = t.name || "—";
+    els.ti.symbol.textContent = t.symbol || "—";
+    els.ti.launch.textContent = ds.launchTs ? new Date(ds.launchTs * 1000).toLocaleString() : "—";
+    els.ti.age.textContent = humanAge(ds.launchTs);
+    els.ti.liq.textContent = fmtUSD(t.total_reserve_in_usd ?? ds?.chosenPool?.reserveUSD ?? null);
+    els.ti.vol24.textContent = fmtUSD(t.volume_usd?.h24 ?? null);
+    els.ti.mcap.textContent = mcapText;
+
+    // contract + actions
+    const addr = ds.address || null;
+    const short = shortAddr(addr);
+    els.ti.contract.textContent = short;
+    els.ti.contract.title = addr || "—";
+    const hasAddr = !!addr;
+    els.ti.copyContract.hidden = !hasAddr;
+    els.ti.copyContract.disabled = !hasAddr;
+    els.ti.scanLink.href = hasAddr ? `https://etherscan.io/token/${addr}` : "#";
+    els.ti.scanLink.hidden = !hasAddr;
+
+    els.ti.wrap.hidden = false;
+}
+
+function buildTableTabs(keys) {
+    const tabsEl = document.getElementById("table-tabs");
+    if (!tabsEl) return;
+    tabsEl.innerHTML = "";
+    keys.forEach(k => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "tab" + (k === state.activeTableKey ? " active" : "");
+        b.textContent = k;
+        b.dataset.key = k;
+        b.addEventListener("click", () => switchTableTab(k));
+        tabsEl.appendChild(b);
+    });
+    tabsEl.hidden = !keys.length;
+}
+
+function switchTableTab(key) {
+    state.activeTableKey = key;
+    const ds = state.datasets[key];
+    if (!ds) return;
+
+    // IMPORTANT: set supply/launch BEFORE rendering table so MCAP shows
+    state.mcapSupply = ds.supply ?? null;
+    state.launchTs = ds.launchTs ?? null;
+
+    // info bar + table for the selected dataset
+    renderInfoBarFromDataset(ds);
+    renderRows(ds.rows || []);
+
+    // Rebuild chart on the same global time grid (no trimming)
+    const metricKeys = getCheckedSeriesKeys();
+    const stratKeys = getCheckedStrategyKeys();
+    buildChartDataMulti(metricKeys, stratKeys);
+    drawChart();
+
+    // update tab look
+    const tabsEl = document.getElementById("table-tabs");
+    if (tabsEl) {
+        tabsEl.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.key === key));
+    }
+}
+
+async function loadOneToken({ network, nameKey, address, step, maxRows, startUnix, endUnix, signal }) {
+    // 1) token + pools
+    const tokenJson = await fetchTokenWithTopPools(network, address, signal);
+    const chosen = pickMostLiquidPool(tokenJson, address);
+    if (!chosen?.poolAddress) {
+        return { key: nameKey, error: "No pool" };
+    }
+
+    // 2) launch + supply
+    const tAttrs = tokenJson?.data?.attributes || {};
+    const pools = (tokenJson?.included || []).filter(x => x.type === "pool");
+    const tsList = pools
+        .map(p => Date.parse(p.attributes?.pool_created_at || "") / 1000)
+        .filter(x => Number.isFinite(x));
+    const launchTs = tsList.length ? Math.min(...tsList) : (chosen?.createdAtISO ? Math.floor(Date.parse(chosen.createdAtISO) / 1000) : null);
+
+    // reference price from attrs or from later candle
+    // we'll fallback after OHLCV if needed
+    let refPrice = numOrNull(tAttrs.price_usd);
+
+    // 3) candles
+    const needByRange = Math.ceil((endUnix - startUnix) / (step.client10m ? 60 : step.sec));
+    const rawLimit = Math.min(1000,
+        (step.client10m ? Math.max(maxRows * 10, needByRange) + 10
+            : Math.max(maxRows, needByRange) + 5));
+
+    const raw = await fetchOHLCV({
+        network,
+        poolAddress: chosen.poolAddress,
+        timeframe: step.tf,
+        aggregate: step.client10m ? 1 : step.agg,
+        limit: rawLimit,
+        beforeTs: endUnix,
+        side: chosen.side,
+        includeEmpty: true,
+        signal
+    });
+
+    const asc = raw.slice().sort((a, b) => a.ts - b.ts);
+    const series = step.client10m ? aggregateTo10m(asc) : asc;
+    const rows = series.filter(k => k.ts >= startUnix && k.ts <= endUnix).slice(0, maxRows);
+
+    if (!refPrice && rows.length) refPrice = rows[rows.length - 1].c ?? null;
+
+    const supply = deriveSupplyForMcap(tAttrs || {}, refPrice);
+
+    return {
+        key: nameKey,
+        address,
+        tokenAttrs: tAttrs,
+        chosenPool: chosen,
+        launchTs,
+        supply,
+        rows
+    };
+}
+
+function buildChartDataMulti(seriesKeys, stratKeys) {
+    const dsMap = state.datasets || {};
+    const grid = state.chart.timeGrid || [];           // canonical timestamps
+    const N = grid.length;
+
+    const combined = {};       // "<strategy>:<series>" -> array of length N
+    const combinedKeys = [];
+
+    const dashBook = [[], [6, 3], [3, 3], [8, 3, 2, 3], [2, 4], [1, 2]];
+    state.chart.strokeStyles = {}; // reset style map
+
+    stratKeys.forEach((sk, si) => {
+        const ds = dsMap[sk];
+        if (!ds) return;
+        const supply = ds.supply;
+        const launchTs = ds.launchTs;
+
+        // map dataset rows by timestamp for O(1) lookup
+        const byTs = new Map((ds.rows || []).map(r => [r.ts, r]));
+
+        for (const ser of seriesKeys) {
+            const key = `${sk}:${ser}`;
+            combinedKeys.push(key);
+            const arr = new Array(N);
+
+            for (let i = 0; i < N; i++) {
+                const ts = grid[i];
+                const r = byTs.get(ts);
+                let val = null;
+                if (r) {
+                    switch (ser) {
+                        case "open": val = r.o; break;
+                        case "high": val = r.h; break;
+                        case "low": val = r.l; break;
+                        case "close": val = r.c; break;
+                        case "volume": val = r.v; break;
+                        case "mcap": val = (supply != null && r?.c != null) ? r.c * supply : null; break;
+                        case "fee": val = Number.isFinite(launchTs) ? computeTradingFeePercentFor(launchTs, ts) : 10; break;
+                        case "breakeven": {
+                            if (Number.isFinite(launchTs)) {
+                                const feePct = computeTradingFeePercentFor(launchTs, ts);
+                                val = breakevenMultipleFromFee(feePct);
+                            }
+                        } break;
+                        case "breakeven_mc": {
+                            if (Number.isFinite(launchTs) && supply != null && r?.c != null) {
+                                const feePct = computeTradingFeePercentFor(launchTs, ts);
+                                const mult = breakevenMultipleFromFee(feePct);
+                                val = (mult != null) ? mult * (r.c * supply) : null;
+                            }
+                        } break;
+                    }
+                }
+                arr[i] = (val == null || !isFinite(val)) ? null : val;
+            }
+
+            combined[key] = arr;
+            const cfg = CHART_SERIES_DEF[ser];
+            state.chart.strokeStyles[key] = { color: (cfg?.color || "#fff"), dash: dashBook[si % dashBook.length] };
+        }
+    });
+
+    // Commit: x-axis uses the global grid; overlay uses combined arrays
+    state.chart.rows = grid.map(ts => ({ ts }));
+    state.chart.seriesCombined = combined;
+    state.chart.combinedKeys = combinedKeys;
+    // IMPORTANT: keep state.chart.seriesKeys = the metric list (unchanged)
+}
+
+
 function getCheckedSeriesKeys() {
-    if (!els.chartControls) return state.chart.seriesKeys;
+    if (!els.chartControls) return [];
     const keys = [];
     els.chartControls.querySelectorAll('input[type="checkbox"][data-ser]').forEach(cb => {
         if (cb.checked) keys.push(cb.getAttribute("data-ser"));
     });
-    return keys.length ? keys : []; // allow empty
+    return keys;
+}
+
+function rebuildChartFromControls() {
+    const metricKeys = getCheckedSeriesKeys();               // e.g., ["close","mcap"]
+    const isAllMode = !!(state.datasets && Object.keys(state.datasets).length);
+
+    if (isAllMode) {
+        const stratKeys = getCheckedStrategyKeys();            // selected strategies
+        // If nothing selected, show nothing (axes still draw).
+        state.chart.seriesKeys = metricKeys.slice();           // store chosen metrics (used by builder)
+        buildChartDataMulti(metricKeys, stratKeys);            // (re)build combined series
+    } else {
+        // single token
+        state.chart.seriesKeys = metricKeys.slice();
+        const rows = (state.datasets && state.activeTableKey && state.datasets[state.activeTableKey])
+            ? (state.datasets[state.activeTableKey].rows || [])
+            : (state.chart.rows || []);
+        buildChartData(rows);                                  // your existing single-token builder
+    }
+
+    drawChart();                                             // always redraw
+}
+
+function wireChartControlHandlers() {
+    // Metric series checkboxes
+    if (els.chartControls) {
+        els.chartControls.onchange = () => rebuildChartFromControls();
+    }
+    // Strategy toggles (the container is static; its content is replaced)
+    const stratWrap = document.getElementById("chart-strategy-controls");
+    if (stratWrap) {
+        stratWrap.onchange = () => rebuildChartFromControls();
+    }
+    // Redraw on resize
+    window.addEventListener("resize", () => drawChart());
+}
+
+function computeTradingFeePercentFor(launchTs, tsSec) {
+    if (!Number.isFinite(launchTs)) return 10;
+    const delta = tsSec - launchTs;
+    if (delta < 0) return 95;
+    const minutes = Math.floor(delta / 60);
+    const fee = 95 - minutes;
+    return Math.max(10, fee);
 }
 
 function buildChartData(rows) {
@@ -171,7 +451,7 @@ function drawChart() {
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
 
-    // Hi-DPI scale
+    // Hi-DPI
     const dpr = window.devicePixelRatio || 1;
     const cssW = canvas.clientWidth || canvas.width;
     const cssH = canvas.clientHeight || canvas.height;
@@ -182,14 +462,29 @@ function drawChart() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, cssW, cssH);
 
+    // legend reset
+    if (els.chartLegend) els.chartLegend.innerHTML = "";
+
     const rows = state.chart.rows || [];
     const n = rows.length;
-    if (!n) { drawEmpty(ctx, cssW, cssH); return; }
 
-    const keys = state.chart.seriesKeys;
-    const series = state.chart.series;
+    // detect ALL-mode (overlay) by presence of datasets and combined keys
+    const isAllMode = !!(state.datasets && Object.keys(state.datasets || {}).length) && Array.isArray(state.chart.combinedKeys);
+    const keys = isAllMode ? (state.chart.combinedKeys || []) : (state.chart.seriesKeys || []);
+    const series = isAllMode ? (state.chart.seriesCombined || {}) : (state.chart.series || {});
 
-    // Collect min/max across selected series (ignore nulls)
+    if (!n || !keys.length) {
+        drawEmpty(ctx, cssW, cssH);
+        // still draw a left axis line so it's not "empty"
+        const pad = { top: 12, right: 56, bottom: 22, left: 8 };
+        ctx.strokeStyle = "rgba(255,255,255,.1)";
+        ctx.beginPath(); ctx.moveTo(pad.left, pad.top); ctx.lineTo(pad.left, cssH - pad.bottom); ctx.stroke();
+        // bind hover to a harmless noop scale
+        return bindChartHover(pad.left, pad.top, cssW - pad.left - pad.right, cssH - pad.top - pad.bottom,
+            i => 0, v => 0, 0, 1);
+    }
+
+    // min/max across visible series
     let min = +Infinity, max = -Infinity;
     keys.forEach(k => {
         (series[k] || []).forEach(v => {
@@ -200,72 +495,101 @@ function drawChart() {
     if (!isFinite(min) || !isFinite(max)) { drawEmpty(ctx, cssW, cssH); return; }
     if (min === max) { min -= 1; max += 1; }
 
-    // === Add vertical padding/breathing room ===
+    // vertical padding
     const span = max - min;
-    const padAmount = Math.max(span * CHART_Y_PAD_FRAC, 1e-6); // tiny fallback
-    const minP = min - padAmount;
-    const maxP = max + padAmount;
+    const padAmt = Math.max(span * CHART_Y_PAD_FRAC, 1e-6);
+    const minP = min - padAmt;
+    const maxP = max + padAmt;
 
-    // Layout
+    // layout
     const pad = { top: 12, right: 56, bottom: 22, left: 8 };
-    const W = cssW, H = cssH;
     const x0 = pad.left, y0 = pad.top;
-    const PW = W - pad.left - pad.right;
-    const PH = H - pad.top - pad.bottom;
+    const PW = cssW - pad.left - pad.right;
+    const PH = cssH - pad.top - pad.bottom;
 
-    // Scales
+    // scales
     const xAt = i => x0 + (n <= 1 ? 0 : (PW * (i / (n - 1))));
     const yAt = v => y0 + PH - ((v - minP) / (maxP - minP)) * PH;
 
-    // Grid + right axis ticks
+    // grid + right axis
     ctx.font = "12px " + getComputedStyle(document.body).getPropertyValue("--mono");
     ctx.textAlign = "right";
     ctx.textBaseline = "middle";
     ctx.strokeStyle = "rgba(255,255,255,.1)";
     ctx.fillStyle = getComputedStyle(document.body).getPropertyValue("--text") || "#fff";
     const ticks = niceTicks(minP, maxP, 6);
+    const axisKeys = isAllMode ? keys.map(k => k.includes(":") ? k.split(":").pop() : k) : keys;
     ticks.forEach(t => {
         const y = yAt(t);
-        ctx.beginPath();
-        ctx.moveTo(x0, y); ctx.lineTo(x0 + PW, y);
-        ctx.stroke();
-        const label = formatForAxis(t, keys);
+        ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x0 + PW, y); ctx.stroke();
+        const label = formatForAxis(t, axisKeys);
         ctx.fillText(label, x0 + PW + 44, y);
     });
 
-
-    // X min/max labels
+    // x labels
     ctx.textAlign = "left"; ctx.textBaseline = "top";
-    if (n > 0) {
-        ctx.fillText(new Date(rows[0].ts * 1000).toLocaleString(), x0, y0 + PH + 4);
-        const w = ctx.measureText(new Date(rows[n - 1].ts * 1000).toLocaleString()).width;
-        ctx.fillText(new Date(rows[n - 1].ts * 1000).toLocaleString(), x0 + PW - w, y0 + PH + 4);
-    }
+    const s0 = new Date(rows[0].ts * 1000).toLocaleString();
+    const s1 = new Date(rows[n - 1].ts * 1000).toLocaleString();
+    ctx.fillText(s0, x0, y0 + PH + 4);
+    const w = ctx.measureText(s1).width;
+    ctx.fillText(s1, x0 + PW - w, y0 + PH + 4);
 
-    // Draw lines
+    // line style helper
+    const getStyle = (key) => {
+        if (!isAllMode) {
+            const plain = key.includes(":") ? key.split(":").pop() : key;
+            const cfg = CHART_SERIES_DEF[plain] || {};
+            return { color: cfg.color || "#fff", dash: [] };
+        }
+        return (state.chart.strokeStyles && state.chart.strokeStyles[key]) || { color: "#fff", dash: [] };
+    };
+
+    // lines
     keys.forEach(k => {
-        const cfg = CHART_SERIES_DEF[k];
         const data = series[k] || [];
-        ctx.strokeStyle = cfg.color;
+        const { color, dash } = getStyle(k);
+        ctx.strokeStyle = color;
         ctx.lineWidth = 2;
+        ctx.setLineDash(dash);
         ctx.beginPath();
         let started = false;
         for (let i = 0; i < n; i++) {
             const v = data[i];
             if (v == null || !isFinite(v)) { started = false; continue; }
             const x = xAt(i), y = yAt(v);
-            if (!started) { ctx.moveTo(x, y); started = true; }
-            else ctx.lineTo(x, y);
+            if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
         }
         ctx.stroke();
     });
+    ctx.setLineDash([]);
 
-    // Legend
-    renderLegend(keys);
+    // legends
+    renderLegend(getCheckedSeriesKeys()); // metric legend
+    // strategy dash legend (only in ALL mode)
+    if (isAllMode && els.chartLegend) {
+        const stratKeys = getCheckedStrategyKeys();
+        if (stratKeys.length) {
+            const dashBook = [[], [6, 3], [3, 3], [8, 3, 2, 3], [2, 4], [1, 2]];
+            const stratLegend = document.createElement("div");
+            stratLegend.style.marginTop = "6px";
+            stratLegend.style.display = "flex";
+            stratLegend.style.flexWrap = "wrap";
+            stratLegend.style.gap = "8px";
+            stratLegend.style.alignItems = "center";
+            stratLegend.style.fontSize = "11px";
+            stratLegend.style.color = getComputedStyle(document.body).getPropertyValue("--muted") || "#ccc";
+            stratKeys.forEach((sk, si) => {
+                const sw = document.createElement("span");
+                sw.style.color = "#ff1ad9";
+                sw.innerHTML = `<span class="dash" style="border-top-style:${(dashBook[si % dashBook.length].length ? 'dashed' : 'solid')}"></span>${sk}`;
+                stratLegend.appendChild(sw);
+            });
+            els.chartLegend.appendChild(stratLegend);
+        }
+    }
 
-    // Hover interaction
+    // hover (uses padded range)
     bindChartHover(x0, y0, PW, PH, xAt, yAt, minP, maxP);
-
 }
 
 function drawEmpty(ctx, W, H) {
@@ -300,106 +624,106 @@ function formatForAxis(v, keys) {
 function bindChartHover(x0, y0, PW, PH, xAt, yAt, min, max) {
     const canvas = els.chart, tip = els.chartTooltip;
     if (!canvas || !tip) return;
-    const rows = state.chart.rows;
-    const keys = state.chart.seriesKeys;
-    const series = state.chart.series;
+
+    const rows = state.chart.rows || [];
+    const isAllMode = !!(state.datasets && Object.keys(state.datasets || {}).length) && Array.isArray(state.chart.combinedKeys);
+    const keysDraw = isAllMode ? (state.chart.combinedKeys || []) : (state.chart.seriesKeys || []);
+    const series = isAllMode ? (state.chart.seriesCombined || {}) : (state.chart.series || {});
+
+    // style resolver
+    function getSeriesStyle(key) {
+        if (isAllMode) {
+            const style = (state.chart.strokeStyles || {})[key];
+            if (style && style.color) return style;
+            const seriesId = key.includes(":") ? key.split(":").pop() : key;
+            const cfg = CHART_SERIES_DEF[seriesId] || {};
+            return { color: cfg.color || "#fff", dash: [] };
+        } else {
+            const seriesId = key.includes(":") ? key.split(":").pop() : key;
+            const cfg = CHART_SERIES_DEF[seriesId] || {};
+            return { color: cfg.color || "#fff", dash: [] };
+        }
+    }
+
+    function plainSeriesIds(keys) {
+        return keys.map(k => (k.includes(":") ? k.split(":").pop() : k));
+    }
 
     function onMove(ev) {
         const rect = canvas.getBoundingClientRect();
         const mx = ev.clientX - rect.left;
         const my = ev.clientY - rect.top;
 
-        // inside plotting area?
         if (mx < x0 || mx > x0 + PW || my < y0 || my > y0 + PH) {
             tip.hidden = true;
-            drawChart(); // redraw to clear hover line
+            drawChart();
             return;
         }
 
-        // nearest index
         const n = rows.length;
         const i = Math.max(0, Math.min(n - 1, Math.round((mx - x0) / (PW / (n - 1 || 1)))));
 
-        // redraw base chart then draw hover
-        drawChartBaseOnly(); // lightweight redraw without re-binding
+        drawChartBaseOnly(); // base redraw
         const ctx = canvas.getContext("2d");
         ctx.setTransform(window.devicePixelRatio || 1, 0, 0, window.devicePixelRatio || 1, 0, 0);
-        const cssW = canvas.clientWidth || canvas.width;
-        const cssH = canvas.clientHeight || canvas.height;
-        const W = cssW, H = cssH;
+
         const px = xAt(i);
 
-        // vertical line
+        // guide
         ctx.strokeStyle = "rgba(255,255,255,.4)";
         ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(px, y0); ctx.lineTo(px, y0 + PH); ctx.stroke();
 
         // points
-        keys.forEach(k => {
-            const cfg = CHART_SERIES_DEF[k];
+        keysDraw.forEach(k => {
             const val = series[k]?.[i];
             if (val == null || !isFinite(val)) return;
             const py = yAt(val);
-            ctx.fillStyle = cfg.color;
+            const { color } = getSeriesStyle(k);
+            ctx.fillStyle = color;
             ctx.beginPath(); ctx.arc(px, py, 3, 0, Math.PI * 2); ctx.fill();
         });
 
-        // Build tooltip HTML (timestamp + all selected series)
-        const dt = new Date(rows[i].ts * 1000);
-        const dtStr = dt.toLocaleString();
+        // tooltip
+        const dtStr = new Date(rows[i].ts * 1000).toLocaleString();
         let html = `<div class="ts"><strong>${dtStr}</strong></div>`;
-        keys.forEach(k => {
-            const cfg = CHART_SERIES_DEF[k];
+        keysDraw.forEach(k => {
             const val = series[k]?.[i];
             if (val == null || !isFinite(val)) return;
-            html += `<div><span style="color:${cfg.color}">●</span> ${cfg.label}: ${cfg.fmt(val)}</div>`;
+            const seriesId = k.includes(":") ? k.split(":").pop() : k;
+            const cfg = CHART_SERIES_DEF[seriesId];
+            const label = (cfg && cfg.label) ? cfg.label : seriesId;
+            const { color } = getSeriesStyle(k);
+            const fmtFn = (cfg && cfg.fmt) ? cfg.fmt : (v => String(v));
+            html += `<div><span style="color:${color}">●</span> ${label}: ${fmtFn(val)}</div>`;
         });
         tip.innerHTML = html;
-
-        // show first so we can measure it
         tip.hidden = false;
 
-        // Clamp tooltip within the chart so it never overflows
+        // clamp inside plot
         const tipRect = tip.getBoundingClientRect();
-        const chartRect = canvas.getBoundingClientRect();
-
-        // Base positions relative to the canvas (same coords you used for mx/my)
-        let tx = px + 10;                 // prefer to the right of the cursor
-        let ty;                           // decide above/below based on space
-
-        // Flip above/below
-        const spaceAbove = (y0 + (my - y0));                // distance from top pad to mouse
-        const spaceBelow = (y0 + PH) - my;                  // distance from mouse to bottom pad
-        if (spaceBelow >= tipRect.height + 8) {
-            // place below the cursor
-            ty = my + 8;
-        } else if (spaceAbove >= tipRect.height + 8) {
-            // place above the cursor
-            ty = my - tipRect.height - 8;
-        } else {
-            // not enough space either way—anchor to inside the plot, below is nicer
-            ty = Math.min(y0 + PH - tipRect.height - 4, Math.max(y0 + 4, my + 8));
-        }
-
-        // Horizontal clamp (8px padding on both sides)
+        const spaceAbove = (my - y0);
+        const spaceBelow = (y0 + PH) - my;
+        let tx = px + 10;
+        let ty;
+        if (spaceBelow >= tipRect.height + 8) ty = my + 8;
+        else if (spaceAbove >= tipRect.height + 8) ty = my - tipRect.height - 8;
+        else ty = Math.min(y0 + PH - tipRect.height - 4, Math.max(y0 + 4, my + 8));
         const maxLeft = (x0 + PW) - tipRect.width - 8;
         tx = Math.max(x0 + 8, Math.min(tx, maxLeft));
-
-        // Apply
         tip.style.left = `${tx}px`;
         tip.style.top = `${ty}px`;
-
     }
 
     function onLeave() {
         tip.hidden = true;
-        drawChart(); // full redraw
+        drawChart();
     }
 
     canvas.onmousemove = onMove;
     canvas.onmouseleave = onLeave;
 
-    // internal: quick redraw without re-binding handlers
+    // base redraw shared with hover
     function drawChartBaseOnly() {
         const ctx = canvas.getContext("2d");
         const dpr = window.devicePixelRatio || 1;
@@ -411,39 +735,41 @@ function bindChartHover(x0, y0, PW, PH, xAt, yAt, min, max) {
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         ctx.clearRect(0, 0, cssW, cssH);
 
-        // re-draw same as drawChart() up to lines
+        // axes
         const ticks = niceTicks(min, max, 6);
-        // axes + labels
         ctx.font = "12px " + getComputedStyle(document.body).getPropertyValue("--mono");
         const pad = { top: 12, right: 56, bottom: 22, left: 8 };
-        const W = cssW, H = cssH;
         const x0b = pad.left, y0b = pad.top;
-        const PWb = W - pad.left - pad.right;
-        const PHb = H - pad.top - pad.bottom;
+        const PWb = cssW - pad.left - pad.right;
+        const PHb = cssH - pad.top - pad.bottom;
         ctx.strokeStyle = "rgba(255,255,255,.1)";
         ctx.textAlign = "right"; ctx.textBaseline = "middle";
+        const plainKeys = plainSeriesIds(keysDraw);
         ticks.forEach(t => {
             const y = y0b + PHb - ((t - min) / (max - min)) * PHb;
             ctx.beginPath(); ctx.moveTo(x0b, y); ctx.lineTo(x0b + PWb, y); ctx.stroke();
-            const label = formatForAxis(t, keys);
+            const label = formatForAxis(t, plainKeys);
             ctx.fillStyle = getComputedStyle(document.body).getPropertyValue("--text") || "#fff";
             ctx.fillText(label, x0b + PWb + 44, y);
         });
+
         // x labels
         ctx.textAlign = "left"; ctx.textBaseline = "top";
-        if (state.chart.rows.length > 0) {
-            ctx.fillText(new Date(state.chart.rows[0].ts * 1000).toLocaleString(), x0b, y0b + PHb + 4);
-            const endStr = new Date(state.chart.rows[state.chart.rows.length - 1].ts * 1000).toLocaleString();
-            const w = ctx.measureText(endStr).width;
-            ctx.fillText(endStr, x0b + PWb - w, y0b + PHb + 4);
+        if (rows.length > 0) {
+            const s0 = new Date(rows[0].ts * 1000).toLocaleString();
+            const s1 = new Date(rows[rows.length - 1].ts * 1000).toLocaleString();
+            ctx.fillText(s0, x0b, y0b + PHb + 4);
+            const w = ctx.measureText(s1).width;
+            ctx.fillText(s1, x0b + PWb - w, y0b + PHb + 4);
         }
+
         // lines
-        const keysB = state.chart.seriesKeys;
-        keysB.forEach(k => {
-            const cfg = CHART_SERIES_DEF[k];
-            const data = state.chart.series[k] || [];
-            ctx.strokeStyle = cfg.color;
+        keysDraw.forEach(k => {
+            const data = series[k] || [];
+            const { color, dash } = getSeriesStyle(k);
+            ctx.strokeStyle = color;
             ctx.lineWidth = 2;
+            ctx.setLineDash(dash || []);
             ctx.beginPath();
             let started = false;
             for (let i = 0; i < data.length; i++) {
@@ -455,6 +781,7 @@ function bindChartHover(x0, y0, PW, PH, xAt, yAt, min, max) {
             }
             ctx.stroke();
         });
+        ctx.setLineDash([]);
     }
 }
 
@@ -549,6 +876,7 @@ function shortAddr(addr) {
 
 function getSelectedContract() {
     const key = (els.strategy?.value || "").trim();
+    if (key === "__ALL__") return null; // special all-mode
     return STRATEGIES[key] || null;
 }
 
@@ -843,97 +1171,116 @@ async function loadPrices(e) {
 
     try {
         const network = FIXED_NETWORK;
-        const contract = getSelectedContract();
         const stepKey = els.step.value;
         const step = STEP_MAP[stepKey];
         const maxRows = Math.max(1, Math.min(1000, parseInt(els.rows.value, 10) || 100));
 
-        if (!contract) {
-            setStatus("Please select a strategy.", false);
-            return;
-        }
-
-        // Reset state for this load
-        Object.assign(state, {
-            network,
-            contract,
-            tokenAttrs: null,
-            chosenPool: null,
-            mcapSupply: null,
-            launchTs: state.launchTs ?? null, // may be set by prefetch
-        });
-
-        setStatus("Selecting pool…", true);
-
-        // 1) Fetch token + pools first so we know Launch (proxy)
-        const tokenJson = await fetchTokenWithTopPools(network, contract, signal);
-        const chosen = pickMostLiquidPool(tokenJson, contract);
-
-        state.tokenAttrs = tokenJson?.data?.attributes || null;
-        state.chosenPool = chosen || null;
-
-        if (!chosen?.poolAddress) {
-            setStatus("No pools found for this token on the selected network.", false);
-            return;
-        }
-
-        // Update info bar (also sets state.launchTs internally)
-        updateInfoBarFromToken(tokenJson, chosen);
-
-        // 2) Now decide the time range
+        // global time range
         const now = new Date();
         let startUnix;
-
-        if (els.startAtLaunch?.checked && state.launchTs) {
-            startUnix = state.launchTs;
-            // reflect it in the input for transparency
-            els.start.value = dateToLocalInput(new Date(startUnix * 1000));
+        if (els.startAtLaunch?.checked) {
+            const singleAddr = getSelectedContract();
+            if (singleAddr) {
+                setStatus("Finding launch…", true);
+                const json = await fetchTokenWithTopPools(network, singleAddr, signal);
+                const launchTs = computeLaunchTsFromTokenJson(json);
+                startUnix = launchTs ?? Math.floor((localInputToDate(els.start.value) || new Date(now.getTime() - 3600 * 1000)).getTime() / 1000);
+            } else {
+                startUnix = Math.floor((localInputToDate(els.start.value) || new Date(now.getTime() - 3600 * 1000)).getTime() / 1000);
+            }
         } else {
             const start = localInputToDate(els.start.value) || new Date(now.getTime() - 60 * 60 * 1000);
             startUnix = Math.floor(start.getTime() / 1000);
         }
+        const endUnix = startUnix + (maxRows - 1) * step.sec;
 
-        const endUnix = startUnix + (maxRows - 1) * step.sec; // implied end
-        setStatus("Fetching OHLCV…", true);
+        const key = (els.strategy?.value || "").trim();
 
-        // 3) Fetch OHLCV
-        const needByRange = Math.ceil((endUnix - startUnix) / (step.client10m ? 60 : step.sec));
-        const rawLimit = Math.min(1000,
-            (step.client10m ? Math.max(maxRows * 10, needByRange) + 10
-                : Math.max(maxRows, needByRange) + 5));
+        if (key === "__ALL__") {
+            // === COMPARE ALL ===
+            setStatus("Loading all strategies…", true);
+            state.datasets = {};
+            const keys = Object.keys(STRATEGIES);
 
-        const rawCandles = await fetchOHLCV({
-            network,
-            poolAddress: chosen.poolAddress,
-            timeframe: step.tf,
-            aggregate: step.client10m ? 1 : step.agg,
-            limit: rawLimit,
-            beforeTs: endUnix,
-            side: chosen.side,
-            includeEmpty: true,
-            signal
+            for (const k of keys) {
+                setStatus(`Loading ${k}…`, true);
+                const ds = await loadOneToken({
+                    network,
+                    nameKey: k,
+                    address: STRATEGIES[k],
+                    step, maxRows, startUnix, endUnix, signal
+                });
+                if (!ds.error) state.datasets[k] = ds;
+            }
+
+            const loadedKeys = Object.keys(state.datasets);
+            if (!loadedKeys.length) {
+                setStatus("No data for any strategy.", false);
+                return;
+            }
+
+            // Chart on a canonical grid
+            state.chart.timeGrid = createTimeGrid(startUnix, endUnix, step.sec);
+            state.chart.rows = state.chart.timeGrid.map(ts => ({ ts }));
+
+            // Tabs + pick first dataset
+            state.activeTableKey = loadedKeys[0];
+            buildTableTabs(loadedKeys);
+
+            const first = state.datasets[state.activeTableKey];
+
+            // IMPORTANT: set supply/launch BEFORE rendering table so MCAP shows
+            state.mcapSupply = first.supply ?? null;
+            state.launchTs = first.launchTs ?? null;
+
+            renderInfoBarFromDataset(first);
+            renderRows(first.rows || []);
+
+            // Chart overlays
+            state.chart.seriesKeys = getCheckedSeriesKeys();   // metric keys
+            renderStrategyCheckboxes(loadedKeys);              // tokens toggles
+            const stratKeys = getCheckedStrategyKeys();
+            buildChartDataMulti(state.chart.seriesKeys, stratKeys);
+            drawChart();
+
+            setStatus(`Done. Loaded ${loadedKeys.length} tokens.`, false);
+            return;
+        }
+
+        // === single token ===
+        const contract = getSelectedContract();
+        if (!contract) { setStatus("Please select a strategy.", false); return; }
+
+        state.datasets = {};
+        state.activeTableKey = null;
+
+        setStatus("Loading…", true);
+        const ds = await loadOneToken({
+            network, nameKey: (els.strategy.value || "").trim(), address: contract,
+            step, maxRows, startUnix, endUnix, signal
         });
+        if (ds.error) { setStatus("No pool found for this token.", false); return; }
 
-        const asc = rawCandles.slice().sort((a, b) => a.ts - b.ts);
-        const series = step.client10m ? aggregateTo10m(asc) : asc;
+        // IMPORTANT: set supply/launch BEFORE rendering table so MCAP shows
+        state.mcapSupply = ds.supply ?? null;
+        state.launchTs = ds.launchTs ?? null;
 
-        const inRange = series.filter(k => k.ts >= startUnix && k.ts <= endUnix);
-        const rows = inRange.slice(0, maxRows);
+        renderInfoBarFromDataset(ds);
+        renderRows(ds.rows || []);
 
-        // Supply for historical MCAP
-        const refCandle = rows[rows.length - 1] || series[series.length - 1];
-        const refPrice = numOrNull((state.tokenAttrs || {}).price_usd) ?? (refCandle?.c ?? null);
-        state.mcapSupply = deriveSupplyForMcap(state.tokenAttrs || {}, refPrice);
-
-        renderRows(rows);
-
-        // Build + draw chart
+        // Single chart
+        state.chart.timeGrid = null;
+        state.chart.rows = ds.rows || [];
         state.chart.seriesKeys = getCheckedSeriesKeys();
-        buildChartData(rows);
+        buildChartData(ds.rows || []);
         drawChart();
 
-        const note = rows.length < maxRows ? ` (only ${rows.length} available)` : "";
-        setStatus(`Done. ${rows.length} rows shown${note}.`, false);
+        const tabsEl = document.getElementById("table-tabs");
+        if (tabsEl) tabsEl.hidden = true;
+        const cs = document.getElementById("chart-strategy-controls");
+        if (cs) cs.hidden = true;
+
+        setStatus(`Done. ${ds.rows?.length || 0} rows shown.`, false);
     } catch (err) {
         if (err.name === "AbortError") { setStatus("Stopped.", false); return; }
         console.error(err);
@@ -942,7 +1289,6 @@ async function loadPrices(e) {
         aborter = null;
     }
 }
-
 
 
 // Wire up UI
@@ -981,25 +1327,16 @@ els.stop.addEventListener("click", () => { if (aborter) aborter.abort(); });
         cb.addEventListener("change", () => localStorage.setItem(key, String(cb.checked)));
     });
 
-    // prefill start from lunch field
-    if (els.startAtLaunch) {
-        els.startAtLaunch.addEventListener("change", prefillStartFromLaunch);
-    }
-    if (els.strategy) {
-        els.strategy.addEventListener("change", prefillStartFromLaunch);
-    }
+    // "At Launch" wiring
+    if (els.startAtLaunch) els.startAtLaunch.addEventListener("change", prefillStartFromLaunch);
+    if (els.strategy) els.strategy.addEventListener("change", prefillStartFromLaunch);
 
-    // Chart series toggles
-    if (els.chartControls) {
-        els.chartControls.addEventListener("change", () => {
-            state.chart.seriesKeys = getCheckedSeriesKeys();
-            buildChartData(state.chart.rows || []);
-            drawChart();
-        });
-    }
+    // Chart control handlers (metrics + tokens) + resize
+    wireChartControlHandlers();
 
-    // Redraw on resize
-    window.addEventListener("resize", () => drawChart());
-
+    // Submit/Stop
+    els.form.addEventListener("submit", loadPrices);
+    els.stop.addEventListener("click", () => { if (aborter) aborter.abort(); });
 })();
+
 

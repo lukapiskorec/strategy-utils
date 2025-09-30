@@ -21,11 +21,13 @@
             <div class="field">
                 <label for="strategy">Strategy</label>
                 <select id="strategy" name="strategy">
+                    <option value="__ALL__">COMPARE ALL</option>
                     <option value="PunkStrategy">PunkStrategy</option>
                     <option value="BirbStrategy">BirbStrategy</option>
                     <option value="DickStrategy">DickStrategy</option>
                     <option value="ApeStrategy">ApeStrategy</option>
                     <option value="PudgyStrategy">PudgyStrategy</option>
+                    <option value="MeebitStrategy">MeebitStrategy</option>
                     <option value="SquiggleStrategy">SquiggleStrategy</option>
                     <option value="ToadzStrategy">ToadzStrategy</option>
                 </select>
@@ -151,6 +153,9 @@
             <label><input type="checkbox" data-col="breakeven_mc" checked> Breakeven MC</label>
         </section>
 
+        <!-- TABLE TABS -->
+        <nav id="table-tabs" class="tabs" hidden></nav>
+
         <!-- TABLE (fixed-height with scroll) -->
         <section class="table-wrap">
             <div class="table-scroll">
@@ -191,6 +196,8 @@
                 <label><input type="checkbox" data-ser="breakeven"> Breakeven mult.</label>
                 <label><input type="checkbox" data-ser="breakeven_mc"> Breakeven MC</label>
             </div>
+
+            <div id="chart-strategy-controls" class="chart-strategy-controls" aria-label="Chart tokens"></div>
 
             <div class="chart-canvas-wrap">
                 <canvas id="chart" width="1000" height="320"></canvas>
