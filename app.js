@@ -36,6 +36,7 @@ const STRATEGIES = {
     MeebitStrategy: "0xc9b2c00f31b210fcea1242d91307a5b1e3b2be68",
     SquiggleStrategy: "0x742fd09cbbeb1ec4e3d6404dfc959a324deb50e6",
     ToadzStrategy: "0x92cedfdbce6e87b595e4a529afa2905480368af4",
+    GobStrategy: "0x5d855d8a3090243fed9bf73999eedfbc2d1dcf21",
 };
 
 const els = {
