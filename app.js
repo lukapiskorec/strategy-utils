@@ -37,7 +37,31 @@ const STRATEGIES = {
     SquiggleStrategy: "0x742fd09cbbeb1ec4e3d6404dfc959a324deb50e6",
     ToadzStrategy: "0x92cedfdbce6e87b595e4a529afa2905480368af4",
     GobStrategy: "0x5d855d8a3090243fed9bf73999eedfbc2d1dcf21",
+    PainStrategy: "0xdfc3af477979912ec90b138d3e5552d5304c5663",
 };
+
+// === Variable starting fee per strategy ===
+// Default if not listed below:
+const DEFAULT_START_FEE = 95; // %
+
+const START_FEE_BY_STRATEGY = {
+    // Edit these as needed (examples shown)
+    PunkStrategy: 10,
+    BirbStrategy: 95,
+    DickStrategy: 95,
+    ApeStrategy: 95,
+    PudgyStrategy: 95,
+    MeebitStrategy: 95,
+    SquiggleStrategy: 95,
+    ToadzStrategy: 95,
+    GobStrategy: 95,
+    PainStrategy: 99,
+};
+
+// Helper to look up the fee by strategy key
+function getStartFeeForKey(nameKey) {
+    return START_FEE_BY_STRATEGY[nameKey] ?? DEFAULT_START_FEE;
+}
 
 const els = {
     form: document.getElementById("controls"),
@@ -149,6 +173,7 @@ const state = {
     chosenPool: null,
     mcapSupply: null,
     launchTs: null,
+    startFee: DEFAULT_START_FEE,
     hiddenCols: new Set(),
 
     // chart state lives here from the start
@@ -327,11 +352,12 @@ function switchTableTab(key) {
     const ds = state.datasets[key];
     if (!ds) return;
 
-    // IMPORTANT: set supply/launch BEFORE rendering table so MCAP shows
+    // Set context for table computations
     state.mcapSupply = ds.supply ?? null;
     state.launchTs = ds.launchTs ?? null;
+    state.startFee = ds.startFee ?? DEFAULT_START_FEE;  // <— add this
 
-    // info bar + table for the selected dataset
+    // info bar + table
     renderInfoBarFromDataset(ds);
     renderRows(ds.rows || []);
 
@@ -362,10 +388,13 @@ async function loadOneToken({ network, nameKey, address, step, maxRows, startUni
     const tsList = pools
         .map(p => Date.parse(p.attributes?.pool_created_at || "") / 1000)
         .filter(x => Number.isFinite(x));
-    const launchTs = tsList.length ? Math.min(...tsList) : (chosen?.createdAtISO ? Math.floor(Date.parse(chosen.createdAtISO) / 1000) : null);
+    const launchTs = tsList.length ? Math.min(...tsList)
+        : (chosen?.createdAtISO ? Math.floor(Date.parse(chosen.createdAtISO) / 1000) : null);
+
+    // per-strategy starting fee
+    const startFee = getStartFeeForKey(nameKey);
 
     // reference price from attrs or from later candle
-    // we'll fallback after OHLCV if needed
     let refPrice = numOrNull(tAttrs.price_usd);
 
     // 3) candles
@@ -400,6 +429,7 @@ async function loadOneToken({ network, nameKey, address, step, maxRows, startUni
         tokenAttrs: tAttrs,
         chosenPool: chosen,
         launchTs,
+        startFee,     // <— NEW
         supply,
         rows
     };
@@ -427,6 +457,7 @@ function buildChartDataMulti(seriesKeys, stratKeys) {
         if (!ds) return;
         const supply = ds.supply;
         const launchTs = ds.launchTs;
+        const startFee = ds.startFee ?? DEFAULT_START_FEE;
 
         // map dataset rows by timestamp for O(1) lookup
         const byTs = new Map((ds.rows || []).map(r => [r.ts, r]));
@@ -448,16 +479,18 @@ function buildChartDataMulti(seriesKeys, stratKeys) {
                         case "close": val = r.c; break;
                         case "volume": val = r.v; break;
                         case "mcap": val = (supply != null && r?.c != null) ? r.c * supply : null; break;
-                        case "fee": val = Number.isFinite(launchTs) ? computeTradingFeePercentFor(launchTs, ts) : 10; break;
+                        case "fee": val = Number.isFinite(launchTs)
+                            ? computeTradingFeePercentFor(launchTs, ts, startFee)
+                            : 10; break;
                         case "breakeven": {
                             if (Number.isFinite(launchTs)) {
-                                const feePct = computeTradingFeePercentFor(launchTs, ts);
+                                const feePct = computeTradingFeePercentFor(launchTs, ts, startFee);
                                 val = breakevenMultipleFromFee(feePct);
                             }
                         } break;
                         case "breakeven_mc": {
                             if (Number.isFinite(launchTs) && supply != null && r?.c != null) {
-                                const feePct = computeTradingFeePercentFor(launchTs, ts);
+                                const feePct = computeTradingFeePercentFor(launchTs, ts, startFee);
                                 const mult = breakevenMultipleFromFee(feePct);
                                 val = (mult != null) ? mult * (r.c * supply) : null;
                             }
@@ -469,7 +502,7 @@ function buildChartDataMulti(seriesKeys, stratKeys) {
 
             combined[key] = arr;
 
-            // === NEW: color by strategy, dash by metric ===
+            // color by strategy, dash by metric
             const dash = SERIES_DASH_DEF[ser] || [];
             state.chart.strokeStyles[key] = { color: stratColor, dash };
         }
@@ -479,7 +512,6 @@ function buildChartDataMulti(seriesKeys, stratKeys) {
     state.chart.rows = grid.map(ts => ({ ts }));
     state.chart.seriesCombined = combined;
     state.chart.combinedKeys = combinedKeys;
-    // NOTE: keep state.chart.seriesKeys = the metric list (unchanged)
 }
 
 
@@ -526,13 +558,17 @@ function wireChartControlHandlers() {
     window.addEventListener("resize", () => drawChart());
 }
 
-function computeTradingFeePercentFor(launchTs, tsSec) {
-    if (!Number.isFinite(launchTs)) return 10;
+// Variable starting fee schedule:
+// minute 0 after launch: startFee%
+// then -1% per minute until it reaches 10%
+// after that: flat 10%. If launchTs missing, default to 10%.
+function computeTradingFeePercentFor(launchTs, tsSec, startFee = DEFAULT_START_FEE, restFee = 10) {
+    if (!Number.isFinite(launchTs)) return restFee;
     const delta = tsSec - launchTs;
-    if (delta < 0) return 95;
+    if (delta < 0) return startFee; // before launch edge
     const minutes = Math.floor(delta / 60);
-    const fee = 95 - minutes;
-    return Math.max(10, fee);
+    const fee = startFee - minutes;
+    return Math.max(restFee, fee);
 }
 
 function buildChartData(rows) {
@@ -945,13 +981,15 @@ function bindChartHover(x0, y0, PW, PH, xAt, yAt, min, max) {
 // after that: flat 10%. If launchTs missing, default to 10%.
 function computeTradingFeePercent(tsSec) {
     const launch = state.launchTs;
+    const startFee = state.startFee ?? DEFAULT_START_FEE;
     if (!Number.isFinite(launch)) return 10;
     const delta = tsSec - launch;
-    if (delta < 0) return 95; // edge: before launch
+    if (delta < 0) return startFee;
     const minutes = Math.floor(delta / 60);
-    const fee = 95 - minutes;
+    const fee = startFee - minutes;
     return Math.max(10, fee);
 }
+
 
 function breakevenMultipleFromFee(pct) {
     if (pct == null || !isFinite(pct)) return null;
@@ -1405,6 +1443,7 @@ async function loadPrices(e) {
             // IMPORTANT: set supply/launch BEFORE rendering table so MCAP shows
             state.mcapSupply = first.supply ?? null;
             state.launchTs = first.launchTs ?? null;
+            state.startFee = first.startFee ?? DEFAULT_START_FEE;
 
             renderInfoBarFromDataset(first);
             renderRows(first.rows || []);
@@ -1437,6 +1476,7 @@ async function loadPrices(e) {
         // IMPORTANT: set supply/launch BEFORE rendering table so MCAP shows
         state.mcapSupply = ds.supply ?? null;
         state.launchTs = ds.launchTs ?? null;
+        state.startFee = ds.startFee ?? DEFAULT_START_FEE;
 
         renderInfoBarFromDataset(ds);
         renderRows(ds.rows || []);
