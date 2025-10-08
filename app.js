@@ -38,6 +38,7 @@ const STRATEGIES = {
     ToadzStrategy: "0x92cedfdbce6e87b595e4a529afa2905480368af4",
     GobStrategy: "0x5d855d8a3090243fed9bf73999eedfbc2d1dcf21",
     PainStrategy: "0xdfc3af477979912ec90b138d3e5552d5304c5663",
+    CheckStrategy: "0x2090dc81f42f6ddd8deace0d3c3339017417b0dc",
 };
 
 // === Variable starting fee per strategy ===
@@ -56,6 +57,7 @@ const START_FEE_BY_STRATEGY = {
     ToadzStrategy: 95,
     GobStrategy: 95,
     PainStrategy: 99,
+    CheckStrategy: 99,
 };
 
 // Helper to look up the fee by strategy key
