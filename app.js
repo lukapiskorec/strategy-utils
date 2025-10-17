@@ -40,6 +40,7 @@ const STRATEGIES = {
     PainStrategy: "0xdfc3af477979912ec90b138d3e5552d5304c5663",
     CheckStrategy: "0x2090dc81f42f6ddd8deace0d3c3339017417b0dc",
     VibeStrategy: "0xd0cc2b0efb168bfe1f94a948d8df70fa10257196",
+    ChimpStrategy: "0x3ca20831ebea5c99aa6e574d83f0a7c733f7e4d0",
 };
 
 // === Variable starting fee per strategy ===
@@ -60,6 +61,7 @@ const START_FEE_BY_STRATEGY = {
     PainStrategy: 99,
     CheckStrategy: 99,
     VibeStrategy: 99,
+    ChimpStrategy: 99,
 };
 
 // Helper to look up the fee by strategy key
